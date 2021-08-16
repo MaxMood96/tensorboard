@@ -119,7 +119,7 @@
     "dagre": "^0.8.5",
     "lodash": "^4.17.19",
     "marked": "^2.0.0",
-    "monaco-editor-core": "^0.20.0",
+    "monaco-editor-core": "^0.26.0",
     "monaco-languages": "^1.10.0",
     "ngx-color-picker": "^10.1.0",
     "numeric": "^1.2.6",
