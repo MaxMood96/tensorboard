@@ -37,7 +37,7 @@
     "@bazel/jasmine": "^4.6.1",
     "@bazel/rollup": "^4.6.1",
     "@bazel/terser": "^4.6.1",
-    "@bazel/typescript": "^4.6.1",
+    "@bazel/typescript": "^5.5.1",
     "@rollup/plugin-commonjs": "^20.0.0",
     "@rollup/plugin-node-resolve": "^13.0.4",
     "@types/d3": "5.7.2",
