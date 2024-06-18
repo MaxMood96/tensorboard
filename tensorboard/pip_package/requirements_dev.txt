@@ -31,3 +31,4 @@ yamllint==1.17.0
 
 # For building Pip package
 virtualenv==20.0.31
+urllib3>=1.26.19 # not directly required, pinned by Snyk to avoid a vulnerability
