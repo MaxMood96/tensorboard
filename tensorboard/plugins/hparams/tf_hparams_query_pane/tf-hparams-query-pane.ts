@@ -22,6 +22,29 @@ import {Canceller} from '../../../components/tf_backend/canceller';
 import '../tf_hparams_utils/hparams-split-layout';
 import * as tf_hparams_utils from '../tf_hparams_utils/tf-hparams-utils';
 
+interface MinMax {
+  minValue: number | 'Infinity' | '-Infinity';
+  maxValue: number | 'Infinity' | '-Infinity';
+}
+
+interface ColumnHparam {
+  hparam: string;
+  filterDiscrete?: any[];
+  filterInterval?: MinMax | null;
+  filterRegexp?: string;
+  order?: string;
+  includeInResult: boolean;
+}
+
+interface ColumnMetric {
+  metric: string;
+  filterInterval?: MinMax | null;
+  order?: string;
+  includeInResult: boolean;
+}
+
+const MAX_DOMAIN_DISCRETE_LIST_LEN = 10;
+
 /**
  * The tf-hparams-query-pane element implements controls for querying the
  * server for a list of session groups. It provides filtering, and
@@ -35,6 +58,12 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
     <hparams-split-layout orientation="vertical">
       <div slot="content" class="section hyperparameters">
         <div class="section-title">Hyperparameters</div>
+        <template is="dom-if" if="[[_TooManyHparams]]">
+          <div class="too-many-hparams">
+            Warning: There were too many hparams to load all of them
+            efficiently. Only [[_maxNumHparamsToLoad]] were loaded.
+          </div>
+        </template>
         <template is="dom-repeat" items="{{_hparams}}" as="hparam">
           <div class="hparam">
             <paper-checkbox
@@ -83,7 +112,7 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
               </paper-input>
             </template>
             <!-- 3. A regexp -->
-            <template is="dom-if" if="[[hparam.filter.regexp]]">
+            <template is="dom-if" if="[[_hasRegexpFilter(hparam)]]">
               <paper-input
                 label="Regular expression"
                 value="{{hparam.filter.regexp}}"
@@ -250,6 +279,12 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
         text-decoration: underline;
         margin-bottom: 7px;
       }
+      .too-many-hparams {
+        color: var(--tb-orange-dark);
+        font-size: 13px;
+        font-style: italic;
+        margin: 12px 0;
+      }
       .discrete-value-checkbox,
       .metric-checkbox,
       .hparam-checkbox {
@@ -411,6 +446,12 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
   //   'regexp' string field containing the filtering regexp.
   @property({type: Array})
   _hparams: any[];
+  // The limit to the number of hparams we will load. Loading too many will slow
+  // down the UI noticeably and possibly crash it.
+  @property({type: Number}) _maxNumHparamsToLoad: number = 1000;
+  // Tracks whether we loaded the maximum number of allowed hparams as defined
+  // by _maxNumHparamsToLoad.
+  @property({type: Boolean}) _tooManyHparams: boolean = false;
   // An array of objects--each storing information about the user
   // setting for a single metric. Each object has the following fields:
   // info: The MetricInfo object returned by the backend in the
@@ -524,6 +565,7 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
     }
     const experimentRequest = {
       experimentName: this.experimentName,
+      hparamsLimit: this._maxNumHparamsToLoad,
     };
     this.backend
       .getExperiment(experimentRequest)
@@ -546,9 +588,7 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
     const result = Boolean(
       this._experiment &&
         this._experiment.hparamInfos &&
-        this._experiment.hparamInfos.length > 0 &&
-        this._experiment.metricInfos &&
-        this._experiment.metricInfos.length > 0
+        this._experiment.hparamInfos.length > 0
     );
     this.set('dataLoadedWithNonEmptyHparams', result);
     this.set('dataLoadedWithEmptyHparams', !result);
@@ -556,33 +596,31 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
   // Updates the _hparams property from the _experiment property.
   _computeHParams() {
     const result: any[] = [];
-    const kNumHParamsToDisplayByDefault = 5;
-    this._experiment.hparamInfos.forEach((anInfo, index) => {
+    this._experiment.hparamInfos.forEach((anInfo) => {
       const hparam = {
         info: anInfo as any,
-        displayed: index < kNumHParamsToDisplayByDefault,
+        // Controls whether the hparam is chosen for display in the main view.
+        // Set later.
+        displayed: false,
         filter: {} as any,
       };
       if (hparam.info.hasOwnProperty('domainDiscrete')) {
-        hparam.filter.domainDiscrete = [];
-        hparam.info.domainDiscrete.forEach((val) => {
-          hparam.filter.domainDiscrete.push({
-            value: val,
-            checked: true,
+        // Handle a discrete domain. Could be of any data type.
+        if (hparam.info.domainDiscrete.length < MAX_DOMAIN_DISCRETE_LIST_LEN) {
+          hparam.filter.domainDiscrete = [];
+          hparam.info.domainDiscrete.forEach((val: any) => {
+            hparam.filter.domainDiscrete.push({
+              value: val,
+              checked: true,
+            });
           });
-        });
-      } else if (hparam.info.type === 'DATA_TYPE_BOOL') {
-        hparam.filter.domainDiscrete = [
-          {
-            value: false,
-            checked: true,
-          },
-          {
-            value: true,
-            checked: true,
-          },
-        ];
+        } else {
+          // Don't show long lists of values. If the list surpasses a certain
+          // threshold then the user instead specifies regex filters.
+          hparam.filter.regexp = '';
+        }
       } else if (hparam.info.type === 'DATA_TYPE_FLOAT64') {
+        // Handle a float interval domain.
         hparam.filter.interval = {
           min: {
             value: '',
@@ -593,14 +631,33 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
             invalid: false,
           },
         };
-      } else if (hparam.info.type === 'DATA_TYPE_STRING') {
-        hparam.filter.regexp = '';
       } else {
-        console.warn('unknown hparam.info.type: %s', hparam.info.type);
+        console.warn(
+          'cannot process domain type %s without discrete domain values',
+          hparam.info.type
+        );
       }
       result.push(hparam);
     });
+    // Reorder by moving hparams with 'differs === true' to the top of the list.
+    result.sort((x, y) => {
+      if (x.info.differs === y.info.differs) {
+        return 0;
+      }
+
+      return x.info.differs ? -1 : 1;
+    });
+    // Choose to display the first 5 hparams in the main view initially.
+    const kNumHParamsToDisplayByDefault = 5;
+    const numHparamsToDisplay = Math.min(
+      kNumHParamsToDisplayByDefault,
+      result.length
+    );
+    for (let i = 0; i < numHparamsToDisplay; i++) {
+      result[i].displayed = true;
+    }
     this.set('_hparams', result);
+    this.set('_TooManyHparams', result.length >= this._maxNumHparamsToLoad);
   }
   // Updates the _metrics property from the _experiment property.
   _computeMetrics() {
@@ -672,6 +729,10 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
       hparamInfos: newHParamInfos,
       metricInfos: newMetricInfos,
     };
+  }
+  // Determines if a regex filter should be rendered.
+  _hasRegexpFilter(hparam) {
+    return hparam.filter.regexp !== undefined;
   }
   // Sends a query to the server for the list of session groups.
   // Asynchronously updates the sessionGroups property with the response.
@@ -748,6 +809,11 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
     const _this = this;
     // Will be set to false if we encounter any invalid inputs.
     let queryValid = true;
+    // Determines if an interval has been set to any range of values other than
+    // the default.
+    function isIntervalSet(interval) {
+      return interval.min.value !== '' || interval.max.value !== '';
+    }
     // Parses an inputInterval object of the form:
     // {min: {value: string, invalid: boolean},
     //  max: {value: string  invalid: boolean}}. Returns an object
@@ -759,20 +825,22 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
     // The inputIntervalPath should be a Polymer path for the inputInterval
     // object. We work with paths, rather than the object, so that we
     // can make observable changes.
-    function parseInputInterval(inputIntervalPath) {
+    function parseInputInterval(inputIntervalPath): MinMax | null {
       const minValueStr = _this.get(inputIntervalPath + '.min.value');
       console.assert(minValueStr !== undefined);
       // The protobuffer JSON mapping maps the strings "-Infinity" and
       // "Infinity" to the floating-point infinity and -infinity values.
-      const minValue: any = minValueStr === '' ? '-Infinity' : +minValueStr;
-      _this.set(inputIntervalPath + '.min.invalid', isNaN(minValue));
-      queryValid = queryValid && !isNaN(minValue);
+      const minValue = minValueStr === '' ? '-Infinity' : +minValueStr;
+      const minValueIsNan = isNaN(minValue as number);
+      _this.set(inputIntervalPath + '.min.invalid', minValueIsNan);
+      queryValid = queryValid && !minValueIsNan;
       const maxValueStr = _this.get(inputIntervalPath + '.max.value');
       console.assert(maxValueStr !== undefined);
-      const maxValue: any = maxValueStr === '' ? 'Infinity' : +maxValueStr;
-      _this.set(inputIntervalPath + '.max.invalid', isNaN(maxValue));
-      queryValid = queryValid && !isNaN(maxValue);
-      if (isNaN(minValue) || isNaN(maxValue)) {
+      const maxValue = maxValueStr === '' ? 'Infinity' : +maxValueStr;
+      const maxValueIsNan = isNaN(maxValue as number);
+      _this.set(inputIntervalPath + '.max.invalid', maxValueIsNan);
+      queryValid = queryValid && !maxValueIsNan;
+      if (minValueIsNan || maxValueIsNan) {
         return null;
       }
       return {minValue: minValue, maxValue: maxValue};
@@ -802,34 +870,48 @@ class TfHparamsQueryPane extends LegacyElementMixin(PolymerElement) {
     const allowedStatuses = this._statuses
       .filter((s) => s.allowed)
       .map((s) => s.value);
-    let colParams: any[] = [];
+    let colParams: (ColumnHparam | ColumnMetric)[] = [];
     // Build the hparams filters in the request.
     this._hparams.forEach((hparam, index) => {
-      let colParam = {hparam: hparam.info.name} as any;
+      let colParam: ColumnHparam = {
+        hparam: hparam.info.name,
+        includeInResult: true,
+      };
       if (hparam.filter.domainDiscrete) {
-        colParam.filterDiscrete = [];
-        hparam.filter.domainDiscrete.forEach((filterVal) => {
-          if (filterVal.checked) {
-            colParam.filterDiscrete.push(filterVal.value);
-          }
-        });
-      } else if (hparam.filter.interval) {
-        colParam.filterInterval = parseInputInterval(
-          '_hparams.' + index + '.filter.interval'
+        const allChecked = hparam.filter.domainDiscrete.every(
+          (filterVal) => filterVal.checked
         );
+        if (!allChecked) {
+          colParam.filterDiscrete = [];
+          hparam.filter.domainDiscrete.forEach((filterVal) => {
+            if (filterVal.checked) {
+              colParam.filterDiscrete!.push(filterVal.value);
+            }
+          });
+        }
+      } else if (hparam.filter.interval) {
+        if (isIntervalSet(hparam.filter.interval)) {
+          colParam.filterInterval = parseInputInterval(
+            '_hparams.' + index + '.filter.interval'
+          );
+        }
       } else if (hparam.filter.regexp) {
         colParam.filterRegexp = hparam.filter.regexp;
       }
+
       colParams.push(colParam);
     });
     // Build the metric filters in the request.
     this._metrics.forEach((metric, index) => {
-      let colParam = {
+      let colParam: ColumnMetric = {
         metric: metric.info.name,
-        filterInterval: parseInputInterval(
-          '_metrics.' + index + '.filter.interval'
-        ),
+        includeInResult: true,
       };
+      if (isIntervalSet(metric.filter.interval)) {
+        colParam.filterInterval = parseInputInterval(
+          '_metrics.' + index + '.filter.interval'
+        );
+      }
       colParams.push(colParam);
     });
     // Sorting.

@@ -13,6 +13,7 @@ tf_ng_module(
     ],
     deps = [
         ":backend_types",
+        ":saved_pins_data_source",
         ":types",
         "//tensorboard/webapp/feature_flag",
         "//tensorboard/webapp/feature_flag/store",
@@ -22,6 +23,30 @@ tf_ng_module(
         "@npm//@angular/core",
         "@npm//@ngrx/store",
         "@npm//rxjs",
+    ],
+)
+
+tf_ng_module(
+    name = "card_interactions_data_source",
+    srcs = [
+        "card_interactions_data_source.ts",
+        "card_interactions_data_source_module.ts",
+    ],
+    deps = [
+        "//tensorboard/webapp/metrics/store:types",
+        "@npm//@angular/core",
+    ],
+)
+
+tf_ng_module(
+    name = "saved_pins_data_source",
+    srcs = [
+        "saved_pins_data_source.ts",
+        "saved_pins_data_source_module.ts",
+    ],
+    deps = [
+        ":types",
+        "@npm//@angular/core",
     ],
 )
 
@@ -68,5 +93,32 @@ tf_ts_library(
         "@npm//@ngrx/store",
         "@npm//@types/jasmine",
         "@npm//rxjs",
+    ],
+)
+
+tf_ts_library(
+    name = "card_interactions_data_source_test",
+    testonly = True,
+    srcs = [
+        "card_interactions_data_source_test.ts",
+    ],
+    deps = [
+        ":card_interactions_data_source",
+        "//tensorboard/webapp/angular:expect_angular_core_testing",
+        "//tensorboard/webapp/metrics:internal_types",
+        "@npm//@types/jasmine",
+    ],
+)
+
+tf_ts_library(
+    name = "saved_pins_data_source_test",
+    testonly = True,
+    srcs = [
+        "saved_pins_data_source_test.ts",
+    ],
+    deps = [
+        ":saved_pins_data_source",
+        "//tensorboard/webapp/angular:expect_angular_core_testing",
+        "@npm//@types/jasmine",
     ],
 )

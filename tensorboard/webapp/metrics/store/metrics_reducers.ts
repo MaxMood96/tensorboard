@@ -18,7 +18,7 @@ import {stateRehydratedFromUrl} from '../../app_routing/actions';
 import {createNamespaceContextedState} from '../../app_routing/namespaced_state_reducer_helper';
 import {RouteKind} from '../../app_routing/types';
 import * as coreActions from '../../core/actions';
-import {globalSettingsLoaded} from '../../persistent_settings';
+import {persistentSettingsLoaded} from '../../persistent_settings';
 import {DataLoadState} from '../../types/data';
 import {ElementId} from '../../util/dom';
 import {mapObjectValues} from '../../util/lang';
@@ -46,15 +46,12 @@ import {
   URLDeserializedState,
 } from '../types';
 import {groupCardIdWithMetdata} from '../utils';
-import {
-  ColumnHeader,
-  ColumnHeaderType,
-  DataTableMode,
-} from '../views/card_renderer/scalar_card_types';
+import {ColumnHeaderType, DataTableMode} from '../../widgets/data_table/types';
 import {
   buildOrReturnStateWithPinnedCopy,
   buildOrReturnStateWithUnresolvedImportedPins,
   canCreateNewPins,
+  cardRangeSelectionEnabled,
   createPluginDataWithLoadable,
   createRunToLoadState,
   generateNextCardStepIndex,
@@ -66,7 +63,9 @@ import {
   getTimeSeriesLoadable,
 } from './metrics_store_internal_utils';
 import {
+  CardFeatureOverride,
   CardMetadataMap,
+  CardStateMap,
   CardStepIndexMap,
   MetricsNamespacedState,
   MetricsNonNamespacedState,
@@ -78,7 +77,10 @@ import {
   TagMetadata,
   TimeSeriesData,
   TimeSeriesLoadable,
+  CardToPinnedCard,
+  PinnedCardToCard,
 } from './metrics_types';
+import {dataTableUtils} from '../../widgets/data_table/utils';
 
 function buildCardMetadataList(tagMetadata: TagMetadata): CardMetadata[] {
   const results: CardMetadata[] = [];
@@ -157,7 +159,6 @@ function getMaxStepIndex(
  * - assign a default step
  * - reselect the max step, if the previous series' max was selected
  * - clamp to the new series' max
- * - set to `null` if the series contains no step data
  */
 function buildNormalizedCardStepIndexMap(
   cardMetadataMap: CardMetadataMap,
@@ -176,9 +177,6 @@ function buildNormalizedCardStepIndexMap(
       timeSeriesData
     );
     if (maxStepIndex === null) {
-      if (cardStepIndex.hasOwnProperty(cardId)) {
-        result[cardId] = null;
-      }
       continue;
     }
     const stepIndex = cardStepIndex.hasOwnProperty(cardId)
@@ -268,25 +266,173 @@ const {initialState, reducers: namespaceContextedReducer} =
       tagGroupExpanded: new Map<string, boolean>(),
       linkedTimeSelection: null,
       linkedTimeEnabled: false,
-      stepSelectorEnabled: false,
+      stepSelectorEnabled: true,
       rangeSelectionEnabled: false,
       singleSelectionHeaders: [
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.SMOOTHED, enabled: true},
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
-        {type: ColumnHeaderType.RELATIVE_TIME, enabled: true},
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
+          removable: false,
+          sortable: true,
+          movable: false,
+        },
+        {
+          type: ColumnHeaderType.SMOOTHED,
+          name: 'smoothed',
+          displayName: 'Smoothed',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.VALUE,
+          name: 'value',
+          displayName: 'Value',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.STEP,
+          name: 'step',
+          displayName: 'Step',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.RELATIVE_TIME,
+          name: 'relative',
+          displayName: 'Relative',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
       ],
       rangeSelectionHeaders: [
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.MIN_VALUE, enabled: true},
-        {type: ColumnHeaderType.MAX_VALUE, enabled: true},
-        {type: ColumnHeaderType.START_VALUE, enabled: true},
-        {type: ColumnHeaderType.END_VALUE, enabled: true},
-        {type: ColumnHeaderType.VALUE_CHANGE, enabled: true},
-        {type: ColumnHeaderType.PERCENTAGE_CHANGE, enabled: true},
-        {type: ColumnHeaderType.START_STEP, enabled: true},
-        {type: ColumnHeaderType.END_STEP, enabled: true},
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
+          removable: false,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.MIN_VALUE,
+          name: 'min',
+          displayName: 'Min',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.MAX_VALUE,
+          name: 'max',
+          displayName: 'Max',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.START_VALUE,
+          name: 'start',
+          displayName: 'Start Value',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.END_VALUE,
+          name: 'end',
+          displayName: 'End Value',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.VALUE_CHANGE,
+          name: 'valueChange',
+          displayName: 'Value',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.PERCENTAGE_CHANGE,
+          name: 'percentageChange',
+          displayName: '%',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.START_STEP,
+          name: 'startStep',
+          displayName: 'Start Step',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.END_STEP,
+          name: 'endStep',
+          displayName: 'End Step',
+          enabled: true,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.STEP_AT_MAX,
+          name: 'stepAtMax',
+          displayName: 'Step At Max',
+          enabled: false,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.STEP_AT_MIN,
+          name: 'stepAtMin',
+          displayName: 'Step At Min',
+          enabled: false,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.MEAN,
+          name: 'mean',
+          displayName: 'Mean',
+          enabled: false,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
+        {
+          type: ColumnHeaderType.RAW_CHANGE,
+          name: 'rawChange',
+          displayName: 'Raw',
+          enabled: false,
+          removable: true,
+          sortable: true,
+          movable: true,
+        },
       ],
       filteredPluginTypes: new Set(),
       stepMinMax: {
@@ -297,6 +443,8 @@ const {initialState, reducers: namespaceContextedReducer} =
     {
       isSettingsPaneOpen: true,
       isSlideoutMenuOpen: false,
+      lastPinnedCardTime: 0,
+      tableEditorSelectedTab: DataTableMode.SINGLE,
       timeSeriesData: {
         scalars: {},
         histograms: {},
@@ -305,6 +453,16 @@ const {initialState, reducers: namespaceContextedReducer} =
       settings: METRICS_SETTINGS_DEFAULT,
       settingOverrides: {},
       visibleCardMap: new Map<ElementId, CardId>(),
+      previousCardInteractions: {
+        tagFilters: [],
+        pins: [],
+        clicks: [],
+      },
+      newCardInteractions: {
+        tagFilters: [],
+        pins: [],
+        clicks: [],
+      },
     },
 
     /** onNavigated */
@@ -433,7 +591,7 @@ const reducer = createReducer(
     }
     return newState;
   }),
-  on(globalSettingsLoaded, (state, {partialSettings}) => {
+  on(persistentSettingsLoaded, (state, {partialSettings}) => {
     const metricsSettings: Partial<MetricsSettings> = {};
     if (
       partialSettings.tooltipSort &&
@@ -450,6 +608,9 @@ const reducer = createReducer(
     if (typeof partialSettings.scalarSmoothing === 'number') {
       metricsSettings.scalarSmoothing = partialSettings.scalarSmoothing;
     }
+    if (typeof partialSettings.savingPinsEnabled === 'boolean') {
+      metricsSettings.savingPinsEnabled = partialSettings.savingPinsEnabled;
+    }
 
     const isSettingsPaneOpen =
       partialSettings.timeSeriesSettingsPaneOpened ?? state.isSettingsPaneOpen;
@@ -459,6 +620,10 @@ const reducer = createReducer(
       partialSettings.rangeSelectionEnabled ?? state.rangeSelectionEnabled;
     const linkedTimeEnabled =
       partialSettings.linkedTimeEnabled ?? state.linkedTimeEnabled;
+    const singleSelectionHeaders =
+      partialSettings.singleSelectionHeaders ?? state.singleSelectionHeaders;
+    const rangeSelectionHeaders =
+      partialSettings.rangeSelectionHeaders ?? state.rangeSelectionHeaders;
 
     return {
       ...state,
@@ -466,6 +631,8 @@ const reducer = createReducer(
       stepSelectorEnabled,
       rangeSelectionEnabled,
       linkedTimeEnabled,
+      singleSelectionHeaders,
+      rangeSelectionHeaders,
       settings: {
         ...state.settings,
         ...metricsSettings,
@@ -549,7 +716,7 @@ const reducer = createReducer(
       if (state.tagGroupExpanded.size === 0) {
         const cardListWithMetadata = nextCardList
           .map((cardId) => {
-            return {...newCardMetadataMap[cardId], cardId} ?? null;
+            return {...newCardMetadataMap[cardId], cardId};
           })
           .filter(Boolean);
         const cardGroups = groupCardIdWithMetdata(cardListWithMetadata);
@@ -607,7 +774,23 @@ const reducer = createReducer(
   ),
   on(actions.metricsCardStateUpdated, (state, {cardId, settings}) => {
     const nextcardStateMap = {...state.cardStateMap};
-    nextcardStateMap[cardId] = {...settings};
+    nextcardStateMap[cardId] = {
+      ...nextcardStateMap[cardId],
+      ...settings,
+    };
+
+    return {
+      ...state,
+      cardStateMap: nextcardStateMap,
+    };
+  }),
+  on(actions.metricsCardFullSizeToggled, (state, {cardId}) => {
+    const nextcardStateMap = {...state.cardStateMap};
+    nextcardStateMap[cardId] = {
+      ...nextcardStateMap[cardId],
+      fullWidth: !nextcardStateMap[cardId]?.fullWidth,
+      tableExpanded: !nextcardStateMap[cardId]?.fullWidth,
+    };
 
     return {
       ...state,
@@ -744,6 +927,28 @@ const reducer = createReducer(
       },
     };
   }),
+  on(actions.metricsHideEmptyCardsToggled, (state) => {
+    return {
+      ...state,
+      settingOverrides: {
+        ...state.settingOverrides,
+        hideEmptyCards: !state.settingOverrides.hideEmptyCards,
+      },
+    };
+  }),
+  on(actions.metricsEnableSavingPinsToggled, (state) => {
+    const nextSavingPinsEnabled = !(
+      state.settingOverrides.savingPinsEnabled ??
+      state.settings.savingPinsEnabled
+    );
+    return {
+      ...state,
+      settingOverrides: {
+        ...state.settingOverrides,
+        savingPinsEnabled: nextSavingPinsEnabled,
+      },
+    };
+  }),
   on(
     actions.multipleTimeSeriesRequested,
     (
@@ -876,6 +1081,13 @@ const reducer = createReducer(
           ...nextCardStateMap[cardId],
           dataMinMax: nextMinMax,
         };
+        const pinnedId = state.cardToPinnedCopy.get(cardId);
+        if (pinnedId) {
+          nextCardStateMap[pinnedId] = {
+            ...nextCardStateMap[pinnedId],
+            dataMinMax: nextMinMax,
+          };
+        }
       }
 
       const nextState: MetricsState = {
@@ -955,6 +1167,7 @@ const reducer = createReducer(
     let nextCardMetadataMap = {...state.cardMetadataMap};
     let nextCardStepIndexMap = {...state.cardStepIndex};
     let nextCardStateMap = {...state.cardStateMap};
+    let nextLastPinnedCardTime = state.lastPinnedCardTime;
 
     if (isPinnedCopy) {
       const originalCardId = state.pinnedCardToOriginal.get(cardId);
@@ -981,6 +1194,7 @@ const reducer = createReducer(
         nextCardMetadataMap = resolvedResult.cardMetadataMap;
         nextCardStepIndexMap = resolvedResult.cardStepIndex;
         nextCardStateMap = resolvedResult.cardStateMap;
+        nextLastPinnedCardTime = Date.now();
       } else {
         const pinnedCardId = state.cardToPinnedCopy.get(cardId)!;
         nextCardToPinnedCopy.delete(cardId);
@@ -999,6 +1213,7 @@ const reducer = createReducer(
       cardToPinnedCopy: nextCardToPinnedCopy,
       cardToPinnedCopyCache: nextCardToPinnedCopyCache,
       pinnedCardToOriginal: nextPinnedCardToOriginal,
+      lastPinnedCardTime: nextLastPinnedCardTime,
     };
   }),
   on(actions.linkedTimeToggled, (state) => {
@@ -1006,15 +1221,17 @@ const reducer = createReducer(
     let nextCardStepIndexMap = {...state.cardStepIndex};
     let nextLinkedTimeSelection = state.linkedTimeSelection;
     let nextStepSelectorEnabled = state.stepSelectorEnabled;
+    let nextRangeSelectionEnabled = state.rangeSelectionEnabled;
 
     // Updates cardStepIndex only when toggle to enable linked time.
     if (nextLinkedTimeEnabled) {
-      const {min} = state.stepMinMax;
-      const startStep = min === Infinity ? 0 : min;
+      const {max} = state.stepMinMax;
+      const startStep = max === -Infinity ? 0 : max;
       nextLinkedTimeSelection = state.linkedTimeSelection ?? {
         start: {step: startStep},
         end: null,
       };
+
       nextCardStepIndexMap = generateNextCardStepIndexFromLinkedTimeSelection(
         state.cardStepIndex,
         state.cardMetadataMap,
@@ -1023,6 +1240,7 @@ const reducer = createReducer(
       );
 
       nextStepSelectorEnabled = nextLinkedTimeEnabled;
+      nextRangeSelectionEnabled = Boolean(nextLinkedTimeSelection.end);
     }
 
     return {
@@ -1031,12 +1249,33 @@ const reducer = createReducer(
       linkedTimeEnabled: nextLinkedTimeEnabled,
       linkedTimeSelection: nextLinkedTimeSelection,
       stepSelectorEnabled: nextStepSelectorEnabled,
+      rangeSelectionEnabled: nextRangeSelectionEnabled,
     };
   }),
   on(actions.rangeSelectionToggled, (state) => {
     const nextRangeSelectionEnabled = !state.rangeSelectionEnabled;
     let nextStepSelectorEnabled = state.stepSelectorEnabled;
     let linkedTimeSelection = state.linkedTimeSelection;
+
+    const nextCardStateMap = Object.entries(state.cardStateMap).reduce(
+      (cardStateMap, [cardId, cardState]) => {
+        // Range selection is tiered, it can be turned on/off globally and
+        // then overridden for an individual card.
+        //
+        // Since range selection was last toggled on/off, some cards were
+        // individually turned off/on respectively. Those cards differed
+        // from the "global" step selection enablement state. Now that
+        // range selection is being turned back on or off, all cards once
+        // again have the "global" state.
+        cardStateMap[cardId] = {
+          ...cardState,
+          stepSelectionOverride: CardFeatureOverride.NONE,
+          rangeSelectionOverride: CardFeatureOverride.NONE,
+        };
+        return cardStateMap;
+      },
+      {} as CardStateMap
+    );
 
     if (nextRangeSelectionEnabled) {
       nextStepSelectorEnabled = nextRangeSelectionEnabled;
@@ -1047,15 +1286,19 @@ const reducer = createReducer(
         };
       }
       if (!linkedTimeSelection.end) {
+        // Enabling range selection from single selection selects the first
+        // step as the start of the range. The previous start step from single
+        // selection is now the end step.
         linkedTimeSelection = {
-          ...linkedTimeSelection,
-          end: {step: state.stepMinMax.max},
+          start: {step: state.stepMinMax.min},
+          end: linkedTimeSelection.start,
         };
       }
     } else {
       if (linkedTimeSelection) {
+        // Disabling range selection keeps the largest step from the range.
         linkedTimeSelection = {
-          ...linkedTimeSelection,
+          start: linkedTimeSelection.end ?? linkedTimeSelection.start,
           end: null,
         };
       }
@@ -1065,6 +1308,7 @@ const reducer = createReducer(
       stepSelectorEnabled: nextStepSelectorEnabled,
       rangeSelectionEnabled: nextRangeSelectionEnabled,
       linkedTimeSelection,
+      cardStateMap: nextCardStateMap,
     };
   }),
   on(actions.timeSelectionChanged, (state, change) => {
@@ -1101,6 +1345,11 @@ const reducer = createReducer(
       nextCardStateMap[cardId] = {
         ...nextCardStateMap[cardId],
         timeSelection: nextTimeSelection,
+        stepSelectionOverride: CardFeatureOverride.OVERRIDE_AS_ENABLED,
+        rangeSelectionOverride:
+          nextTimeSelection.end?.step === undefined
+            ? CardFeatureOverride.OVERRIDE_AS_DISABLED
+            : CardFeatureOverride.OVERRIDE_AS_ENABLED,
       };
     }
 
@@ -1112,11 +1361,11 @@ const reducer = createReducer(
       rangeSelectionEnabled: nextRangeSelectionEnabled,
     };
   }),
-  on(actions.cardMinMaxChanged, (state, {cardId, minMax}) => {
+  on(actions.cardViewBoxChanged, (state, {cardId, userViewBox}) => {
     const nextCardStateMap = {...state.cardStateMap};
     nextCardStateMap[cardId] = {
       ...nextCardStateMap[cardId],
-      userMinMax: minMax,
+      userViewBox,
     };
 
     return {
@@ -1124,14 +1373,42 @@ const reducer = createReducer(
       cardStateMap: nextCardStateMap,
     };
   }),
-  on(actions.stepSelectorToggled, (state, {affordance}) => {
+  on(actions.stepSelectorToggled, (state, {affordance, cardId}) => {
+    const nextCardStateMap = {...state.cardStateMap};
+    if (cardId) {
+      // cardId is only included when the event is generated from a scalar card
+      // The only time that the scalar card dispatches a step selection toggled
+      // event is when the last fob is being removed, therefore this should
+      // always result in stepSelection being disabled.
+      const {timeSelection, ...cardState} = nextCardStateMap[cardId] || {};
+      nextCardStateMap[cardId] = {
+        ...cardState,
+        stepSelectionOverride: CardFeatureOverride.OVERRIDE_AS_DISABLED,
+      };
+    } else {
+      // Step selection is tiered, it can be turned on/off global and then
+      // overridden for an individual card.
+      //
+      // When no cardId is provided, the global status is being changed and
+      // thus all cards should be made to adhere to the new state.
+      Object.keys(nextCardStateMap).forEach((cardId) => {
+        nextCardStateMap[cardId] = {
+          ...nextCardStateMap[cardId],
+          stepSelectionOverride: CardFeatureOverride.NONE,
+        };
+      });
+    }
+
     if (
       !state.linkedTimeEnabled &&
       affordance !== TimeSelectionToggleAffordance.CHECK_BOX
     ) {
       // In plain step selection mode (without linked time), we do not allow
       // interactions with fobs to modify global step selection state.
-      return {...state};
+      return {
+        ...state,
+        cardStateMap: nextCardStateMap,
+      };
     }
 
     const nextStepSelectorEnabled = !state.stepSelectorEnabled;
@@ -1145,92 +1422,72 @@ const reducer = createReducer(
       linkedTimeEnabled: nextLinkedTimeEnabled,
       stepSelectorEnabled: nextStepSelectorEnabled,
       rangeSelectionEnabled: nextRangeSelectionEnabled,
+      cardStateMap: nextCardStateMap,
     };
   }),
-  on(actions.timeSelectionCleared, (state) => {
+  on(actions.tableEditorTabChanged, (state, {tab}) => {
     return {
       ...state,
-      linkedTimeSelection: null,
+      tableEditorSelectedTab: tab,
     };
   }),
-  on(actions.dataTableColumnDrag, (state, {newOrder}) => {
-    if (state.rangeSelectionEnabled) {
-      return {
-        ...state,
-        rangeSelectionHeaders: newOrder,
-      };
-    }
+  on(
+    actions.dataTableColumnOrderChanged,
+    (state, {source, destination, side, dataTableMode}) => {
+      let headers =
+        dataTableMode === DataTableMode.RANGE
+          ? [...state.rangeSelectionHeaders]
+          : [...state.singleSelectionHeaders];
+      headers = dataTableUtils.moveColumn(headers, source, destination, side);
 
-    return {
-      ...state,
-      singleSelectionHeaders: newOrder,
-    };
-  }),
-  on(actions.dataTableColumnEdited, (state, {dataTableMode, headers}) => {
-    const enabledNewHeaders: ColumnHeader[] = [];
-    const disabledNewHeaders: ColumnHeader[] = [];
-
-    // All enabled headers appear above all disabled headers.
-    headers.forEach((header) => {
-      if (header.enabled) {
-        enabledNewHeaders.push(header);
-      } else {
-        disabledNewHeaders.push(header);
+      if (dataTableMode === DataTableMode.RANGE) {
+        return {
+          ...state,
+          rangeSelectionHeaders: headers,
+        };
       }
-    });
-
-    if (dataTableMode === DataTableMode.RANGE) {
       return {
         ...state,
-        rangeSelectionHeaders: enabledNewHeaders.concat(disabledNewHeaders),
+        singleSelectionHeaders: headers,
       };
     }
-
-    return {
-      ...state,
-      singleSelectionHeaders: enabledNewHeaders.concat(disabledNewHeaders),
-    };
-  }),
-  on(actions.dataTableColumnToggled, (state, {dataTableMode, headerType}) => {
-    const targetedHeaders =
-      dataTableMode === DataTableMode.RANGE
+  ),
+  on(
+    actions.dataTableColumnToggled,
+    (state, {dataTableMode, header: toggledHeader, cardId}) => {
+      const {cardStateMap, rangeSelectionEnabled, linkedTimeEnabled} = state;
+      const rangeEnabled = cardId
+        ? cardRangeSelectionEnabled(
+            cardStateMap,
+            rangeSelectionEnabled,
+            linkedTimeEnabled,
+            cardId
+          )
+        : dataTableMode === DataTableMode.RANGE;
+      const targetedHeaders = rangeEnabled
         ? state.rangeSelectionHeaders
         : state.singleSelectionHeaders;
 
-    const currentToggledHeaderIndex = targetedHeaders.findIndex(
-      (element) => element.type === headerType
-    );
+      const newHeaders = targetedHeaders.map((header) => {
+        const newHeader = {...header};
+        if (header.name === toggledHeader.name) {
+          newHeader.enabled = !newHeader.enabled;
+        }
+        return newHeader;
+      });
 
-    // If the header is being enabled it goes at the bottom of the currently
-    // enabled headers. If it is being disabled it goes to the top of the
-    // currently disabled headers.
-    let newToggledHeaderIndex = getEnabledCount(targetedHeaders);
-    if (targetedHeaders[currentToggledHeaderIndex].enabled) {
-      newToggledHeaderIndex--;
-    }
-    const newHeaders = moveHeader(
-      currentToggledHeaderIndex,
-      newToggledHeaderIndex,
-      targetedHeaders
-    );
-
-    newHeaders[newToggledHeaderIndex] = {
-      type: newHeaders[newToggledHeaderIndex].type,
-      enabled: !newHeaders[newToggledHeaderIndex].enabled,
-    };
-
-    if (dataTableMode === DataTableMode.RANGE) {
+      if (rangeEnabled) {
+        return {
+          ...state,
+          rangeSelectionHeaders: newHeaders,
+        };
+      }
       return {
         ...state,
-        rangeSelectionHeaders: newHeaders,
+        singleSelectionHeaders: newHeaders,
       };
     }
-
-    return {
-      ...state,
-      singleSelectionHeaders: newHeaders,
-    };
-  }),
+  ),
   on(actions.metricsToggleVisiblePlugin, (state, {plugin}) => {
     let nextFilteredPluginTypes = new Set(state.filteredPluginTypes);
     if (nextFilteredPluginTypes.has(plugin)) {
@@ -1259,6 +1516,54 @@ const reducer = createReducer(
   }),
   on(actions.metricsSlideoutMenuToggled, (state) => {
     return {...state, isSlideoutMenuOpen: !state.isSlideoutMenuOpen};
+  }),
+  on(actions.metricsSlideoutMenuOpened, (state, {mode}) => {
+    // The reason the toggle action does not open the settings pane is because
+    // the settings pane is the only place the menu can be toggled. The open
+    // request can be made from the card when the settings menu is closed,
+    // therefore we need to make sure the settings menu is opened, too.
+    return {
+      ...state,
+      isSlideoutMenuOpen: true,
+      isSettingsPaneOpen: true,
+      tableEditorSelectedTab: mode,
+    };
+  }),
+  on(actions.metricsSlideoutMenuClosed, (state) => {
+    return {...state, isSlideoutMenuOpen: false};
+  }),
+  on(
+    actions.metricsUnresolvedPinnedCardsFromLocalStorageAdded,
+    (state, {cards}) => {
+      return {
+        ...state,
+        unresolvedImportedPinnedCards: [
+          ...state.unresolvedImportedPinnedCards,
+          ...cards,
+        ],
+      };
+    }
+  ),
+  on(actions.metricsClearAllPinnedCards, (state) => {
+    const nextCardMetadataMap = {...state.cardMetadataMap};
+    const nextCardStepIndex = {...state.cardStepIndex};
+    const nextCardStateMap = {...state.cardStateMap};
+
+    for (const cardId of state.pinnedCardToOriginal.keys()) {
+      delete nextCardMetadataMap[cardId];
+      delete nextCardStepIndex[cardId];
+      delete nextCardStateMap[cardId];
+    }
+
+    return {
+      ...state,
+      cardMetadataMap: nextCardMetadataMap,
+      cardStateMap: nextCardStateMap,
+      cardStepIndex: nextCardStepIndex,
+      cardToPinnedCopy: new Map() as CardToPinnedCard,
+      cardToPinnedCopyCache: new Map() as CardToPinnedCard,
+      pinnedCardToOriginal: new Map() as PinnedCardToCard,
+    };
   })
 );
 
@@ -1287,31 +1592,4 @@ function buildTagToRuns(runTagInfo: {[run: string]: string[]}) {
     }
   }
   return tagToRuns;
-}
-
-/**
- * Returns a copy of the headers array with item at sourceIndex moved to
- * destinationIndex.
- */
-function moveHeader(
-  sourceIndex: number,
-  destinationIndex: number,
-  headers: ColumnHeader[]
-) {
-  const newHeaders = [...headers];
-  // Delete from original location
-  newHeaders.splice(sourceIndex, 1);
-  // Insert at destinationIndex.
-  newHeaders.splice(destinationIndex, 0, headers[sourceIndex]);
-  return newHeaders;
-}
-
-function getEnabledCount(headers: ColumnHeader[]) {
-  let count = 0;
-  headers.forEach((header) => {
-    if (header.enabled) {
-      count++;
-    }
-  });
-  return count;
 }

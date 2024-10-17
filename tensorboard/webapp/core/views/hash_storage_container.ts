@@ -20,6 +20,7 @@ import {getActivePlugin} from '../store';
 import {ChangedProp} from './hash_storage_component';
 
 @Component({
+  standalone: false,
   selector: 'hash-storage',
   template: `
     <hash-storage-component
@@ -38,9 +39,11 @@ import {ChangedProp} from './hash_storage_component';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HashStorageContainer {
-  readonly activePluginId$ = this.store.pipe(select(getActivePlugin));
+  readonly activePluginId$;
 
-  constructor(private readonly store: Store<State>) {}
+  constructor(private readonly store: Store<State>) {
+    this.activePluginId$ = this.store.pipe(select(getActivePlugin));
+  }
 
   onValueChanged(change: {prop: ChangedProp; value: string}) {
     switch (change.prop) {

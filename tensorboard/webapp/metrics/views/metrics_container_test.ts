@@ -15,22 +15,47 @@ limitations under the License.
 import {NO_ERRORS_SCHEMA} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {By} from '@angular/platform-browser';
+import {Store} from '@ngrx/store';
+import {MockStore} from '@ngrx/store/testing';
+import {State} from '../../app_state';
+import {RunsSelectorContainer} from '../../runs/views/runs_selector/runs_selector_container';
+import {provideMockTbStore} from '../../testing/utils';
 import {MetricsDashboardContainer} from './metrics_container';
+import {getRunsTableFullScreen} from '../../core/store/core_selectors';
+import {MainViewContainer} from './main_view/main_view_container';
 
 describe('metrics view', () => {
+  let store: MockStore<State>;
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [MetricsDashboardContainer],
-      providers: [],
+      declarations: [MetricsDashboardContainer, RunsSelectorContainer],
+      providers: [provideMockTbStore()],
       // Ignore errors from components that are out-of-scope for this test:
       // 'runs-selector'.
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
+
+    store = TestBed.inject<Store<State>>(Store) as MockStore<State>;
+  });
+
+  afterEach(() => {
+    store.resetSelectors();
   });
 
   it('renders', () => {
     const fixture = TestBed.createComponent(MetricsDashboardContainer);
     fixture.detectChanges();
     expect(fixture.debugElement.query(By.css('runs-selector'))).not.toBeNull();
+  });
+
+  it('hides main view when the runs table is full screen is true', () => {
+    store.overrideSelector(getRunsTableFullScreen, true);
+    const fixture = TestBed.createComponent(MetricsDashboardContainer);
+    fixture.detectChanges();
+
+    expect(
+      fixture.debugElement.query(By.directive(MainViewContainer))
+    ).toBeNull();
   });
 });

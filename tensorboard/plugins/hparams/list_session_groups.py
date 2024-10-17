@@ -25,9 +25,12 @@ from google.protobuf import struct_pb2
 
 from tensorboard.data import provider
 from tensorboard.plugins.hparams import api_pb2
+from tensorboard.plugins.hparams import backend_context as backend_context_lib
 from tensorboard.plugins.hparams import error
+from tensorboard.plugins.hparams import json_format_compat
 from tensorboard.plugins.hparams import metadata
 from tensorboard.plugins.hparams import metrics
+from tensorboard.plugins.hparams import plugin_data_pb2
 
 
 class Handler:
@@ -48,31 +51,182 @@ class Handler:
         self._backend_context = backend_context
         self._experiment_id = experiment_id
         self._request = request
-        self._extractors = _create_extractors(request.col_params)
-        self._filters = _create_filters(request.col_params, self._extractors)
-        # Query for all Hparams summary metadata up front to minimize calls to
-        # the underlying DataProvider.
-        self._hparams_run_to_tag_to_content = backend_context.hparams_metadata(
-            request_context, experiment_id
-        )
-        # Since an context.experiment() call may search through all the runs, we
-        # cache it here.
-        self._experiment = backend_context.experiment_from_metadata(
-            request_context, experiment_id, self._hparams_run_to_tag_to_content
+        self._include_metrics = (
+            # Metrics are included by default if include_metrics is not
+            # specified in the request.
+            not self._request.HasField("include_metrics")
+            or self._request.include_metrics
         )
 
     def run(self):
         """Handles the request specified on construction.
 
+        This operation first attempts to construct SessionGroup information
+        from hparam tags metadata.EXPERIMENT_TAG and
+        metadata.SESSION_START_INFO.
+
+        If no such tags are found, then will build SessionGroup information
+        using the results from DataProvider.read_hyperparameters().
+
         Returns:
           A ListSessionGroupsResponse object.
         """
-        session_groups = self._build_session_groups()
-        session_groups = self._filter(session_groups)
-        self._sort(session_groups)
-        return self._create_response(session_groups)
 
-    def _build_session_groups(self):
+        session_groups_from_tags = self._session_groups_from_tags()
+        if session_groups_from_tags:
+            return self._create_response(session_groups_from_tags)
+
+        session_groups_from_data_provider = (
+            self._session_groups_from_data_provider()
+        )
+        if session_groups_from_data_provider:
+            return self._create_response(session_groups_from_data_provider)
+
+        return api_pb2.ListSessionGroupsResponse(
+            session_groups=[], total_size=0
+        )
+
+    def _session_groups_from_tags(self):
+        """Constructs lists of SessionGroups based on hparam tag metadata."""
+        # Query for all Hparams summary metadata one time to minimize calls to
+        # the underlying DataProvider.
+        hparams_run_to_tag_to_content = self._backend_context.hparams_metadata(
+            self._request_context, self._experiment_id
+        )
+        # Construct the experiment one time since an context.experiment() call
+        # may search through all the runs.
+        experiment = self._backend_context.experiment_from_metadata(
+            self._request_context,
+            self._experiment_id,
+            self._include_metrics,
+            hparams_run_to_tag_to_content,
+            # Don't pass any information from the DataProvider since we are only
+            # examining session groups based on tag metadata
+            provider.ListHyperparametersResult(
+                hyperparameters=[], session_groups=[]
+            ),
+        )
+        extractors = _create_extractors(self._request.col_params)
+        filters = _create_filters(self._request.col_params, extractors)
+
+        session_groups = self._build_session_groups(
+            hparams_run_to_tag_to_content, experiment.metric_infos
+        )
+        session_groups = self._filter(session_groups, filters)
+        self._sort(session_groups, extractors)
+
+        if _specifies_include(self._request.col_params):
+            _reduce_to_hparams_to_include(
+                session_groups, self._request.col_params
+            )
+
+        return session_groups
+
+    def _session_groups_from_data_provider(self):
+        """Constructs lists of SessionGroups based on DataProvider results."""
+        filters = _build_data_provider_filters(self._request.col_params)
+        sort = _build_data_provider_sort(self._request.col_params)
+        hparams_to_include = (
+            _get_hparams_to_include(self._request.col_params)
+            if _specifies_include(self._request.col_params)
+            else None
+        )
+        response = self._backend_context.session_groups_from_data_provider(
+            self._request_context,
+            self._experiment_id,
+            filters,
+            sort,
+            hparams_to_include,
+        )
+
+        metric_infos = (
+            self._backend_context.compute_metric_infos_from_data_provider_session_groups(
+                self._request_context, self._experiment_id, response
+            )
+            if self._include_metrics
+            else []
+        )
+
+        all_metric_evals = (
+            self._backend_context.read_last_scalars(
+                self._request_context,
+                self._experiment_id,
+                run_tag_filter=None,
+            )
+            if self._include_metrics
+            else {}
+        )
+
+        session_groups = []
+        for provider_group in response:
+            sessions = []
+            for session in provider_group.sessions:
+                session_name = (
+                    backend_context_lib.generate_data_provider_session_name(
+                        session
+                    )
+                )
+                sessions.append(
+                    self._build_session(
+                        metric_infos,
+                        session_name,
+                        plugin_data_pb2.SessionStartInfo(),
+                        plugin_data_pb2.SessionEndInfo(),
+                        all_metric_evals,
+                    )
+                )
+
+            name = backend_context_lib.generate_data_provider_session_name(
+                provider_group.root
+            )
+            if not name:
+                name = self._experiment_id
+            session_group = api_pb2.SessionGroup(
+                name=name,
+                sessions=sessions,
+            )
+
+            for provider_hparam in provider_group.hyperparameter_values:
+                hparam = session_group.hparams[
+                    provider_hparam.hyperparameter_name
+                ]
+                if (
+                    provider_hparam.domain_type
+                    == provider.HyperparameterDomainType.DISCRETE_STRING
+                ):
+                    hparam.string_value = provider_hparam.value
+                elif provider_hparam.domain_type in [
+                    provider.HyperparameterDomainType.DISCRETE_FLOAT,
+                    provider.HyperparameterDomainType.INTERVAL,
+                ]:
+                    hparam.number_value = provider_hparam.value
+                elif (
+                    provider_hparam.domain_type
+                    == provider.HyperparameterDomainType.DISCRETE_BOOL
+                ):
+                    hparam.bool_value = provider_hparam.value
+
+            session_groups.append(session_group)
+
+        # Compute the session group's aggregated metrics for each group.
+        for group in session_groups:
+            if group.sessions:
+                self._aggregate_metrics(group)
+
+        extractors = _create_extractors(self._request.col_params)
+        filters = _create_filters(
+            self._request.col_params,
+            extractors,
+            # We assume the DataProvider will apply hparam filters and we do not
+            # attempt to reapply them.
+            include_hparam_filters=False,
+        )
+        session_groups = self._filter(session_groups, filters)
+        return session_groups
+
+    def _build_session_groups(
+        self, hparams_run_to_tag_to_content, metric_infos
+    ):
         """Returns a list of SessionGroups protobuffers from the summary
         data."""
 
@@ -88,30 +242,34 @@ class Handler:
         # contain metrics (may be in subdirectories).
         session_names = [
             run
-            for (run, tags) in self._hparams_run_to_tag_to_content.items()
+            for (run, tags) in hparams_run_to_tag_to_content.items()
             if metadata.SESSION_START_INFO_TAG in tags
         ]
         metric_runs = set()
         metric_tags = set()
         for session_name in session_names:
-            for metric in self._experiment.metric_infos:
+            for metric in metric_infos:
                 metric_name = metric.name
                 (run, tag) = metrics.run_tag_from_session_and_metric(
                     session_name, metric_name
                 )
                 metric_runs.add(run)
                 metric_tags.add(tag)
-        all_metric_evals = self._backend_context.read_last_scalars(
-            self._request_context,
-            self._experiment_id,
-            run_tag_filter=provider.RunTagFilter(
-                runs=metric_runs, tags=metric_tags
-            ),
+        all_metric_evals = (
+            self._backend_context.read_last_scalars(
+                self._request_context,
+                self._experiment_id,
+                run_tag_filter=provider.RunTagFilter(
+                    runs=metric_runs, tags=metric_tags
+                ),
+            )
+            if self._include_metrics
+            else {}
         )
         for (
             session_name,
             tag_to_content,
-        ) in self._hparams_run_to_tag_to_content.items():
+        ) in hparams_run_to_tag_to_content.items():
             if metadata.SESSION_START_INFO_TAG not in tag_to_content:
                 continue
             start_info = metadata.parse_session_start_info_plugin_data(
@@ -123,7 +281,11 @@ class Handler:
                     tag_to_content[metadata.SESSION_END_INFO_TAG]
                 )
             session = self._build_session(
-                session_name, start_info, end_info, all_metric_evals
+                metric_infos,
+                session_name,
+                start_info,
+                end_info,
+                all_metric_evals,
             )
             if session.status in self._request.allowed_statuses:
                 self._add_session(session, start_info, groups_by_name)
@@ -167,11 +329,20 @@ class Handler:
             # hyperparameter values) into result.
             # There doesn't seem to be a way to initialize a protobuffer map in the
             # constructor.
-            for (key, value) in start_info.hparams.items():
+            for key, value in start_info.hparams.items():
+                if not json_format_compat.is_serializable_value(value):
+                    # NaN number_value cannot be serialized by higher level layers
+                    # that are using json_format.MessageToJson(). To workaround
+                    # the issue we do not copy them to the session group and
+                    # effectively treat them as "unset".
+                    continue
+
                 group.hparams[key].CopyFrom(value)
             groups_by_name[group_name] = group
 
-    def _build_session(self, name, start_info, end_info, all_metric_evals):
+    def _build_session(
+        self, metric_infos, name, start_info, end_info, all_metric_evals
+    ):
         """Builds a session object."""
 
         assert start_info is not None
@@ -180,7 +351,7 @@ class Handler:
             start_time_secs=start_info.start_time_secs,
             model_uri=start_info.model_uri,
             metric_values=self._build_session_metric_values(
-                name, all_metric_evals
+                metric_infos, name, all_metric_evals
             ),
             monitor_url=start_info.monitor_url,
         )
@@ -189,12 +360,13 @@ class Handler:
             result.end_time_secs = end_info.end_time_secs
         return result
 
-    def _build_session_metric_values(self, session_name, all_metric_evals):
+    def _build_session_metric_values(
+        self, metric_infos, session_name, all_metric_evals
+    ):
         """Builds the session metric values."""
 
         # result is a list of api_pb2.MetricValue instances.
         result = []
-        metric_infos = self._experiment.metric_infos
         for metric_info in metric_infos:
             metric_name = metric_info.name
             (run, tag) = metrics.run_tag_from_session_and_metric(
@@ -241,13 +413,15 @@ class Handler:
                 % self._request.aggregation_type
             )
 
-    def _filter(self, session_groups):
-        return [sg for sg in session_groups if self._passes_all_filters(sg)]
+    def _filter(self, session_groups, filters):
+        return [
+            sg for sg in session_groups if self._passes_all_filters(sg, filters)
+        ]
 
-    def _passes_all_filters(self, session_group):
-        return all(filter_fn(session_group) for filter_fn in self._filters)
+    def _passes_all_filters(self, session_group, filters):
+        return all(filter_fn(session_group) for filter_fn in filters)
 
-    def _sort(self, session_groups):
+    def _sort(self, session_groups, extractors):
         """Sorts 'session_groups' in place according to _request.col_params."""
 
         # Sort by session_group name so we have a deterministic order.
@@ -258,7 +432,7 @@ class Handler:
         # need to iterate on these columns in reverse order (thus the primary key
         # is the key used in the last sort).
         for col_param, extractor in reversed(
-            list(zip(self._request.col_params, self._extractors))
+            list(zip(self._request.col_params, extractors))
         ):
             if col_param.order == api_pb2.ORDER_UNSPECIFIED:
                 continue
@@ -418,7 +592,7 @@ def _create_hparam_extractor(hparam_name):
 # True if it should be included in the result. Currently, Filters are functions
 # of a single column value extracted from the session group with a given
 # extractor specified in the construction of the filter.
-def _create_filters(col_params, extractors):
+def _create_filters(col_params, extractors, *, include_hparam_filters=True):
     """Creates filters for the given col_params.
 
     Args:
@@ -426,12 +600,17 @@ def _create_filters(col_params, extractors):
       extractors: list of extractor functions of the same length as col_params.
         Each element should extract the column described by the corresponding
         element of col_params.
+      include_hparam_filters: bool that indicates whether hparam filters should
+        be generated. Defaults to True.
     Returns:
       A list of filter functions. Each corresponding to a single
       col_params.filter oneof field of _request
     """
     result = []
     for col_param, extractor in zip(col_params, extractors):
+        if not include_hparam_filters and col_param.hparam:
+            continue
+
         a_filter = _create_filter(col_param, extractor)
         if a_filter:
             result.append(a_filter)
@@ -632,7 +811,7 @@ def _set_avg_session_metrics(session_group):
             stats.total_wall_time_secs += metric_value.wall_time_secs
 
     del session_group.metric_values[:]
-    for (metric_name, stats) in metric_stats.items():
+    for metric_name, stats in metric_stats.items():
         session_group.metric_values.add(
             name=api_pb2.MetricName(
                 group=metric_name.group, tag=metric_name.tag
@@ -720,3 +899,143 @@ def _measurements(session_group, metric_name):
         if not metric_value:
             continue
         yield _Measurement(metric_value, session_index)
+
+
+def _build_data_provider_filters(col_params):
+    """Builds HyperparameterFilters from ColParams."""
+    filters = []
+    for col_param in col_params:
+        if not col_param.hparam:
+            # We do not pass metric filters to the DataProvider as it does not
+            # have the metric data for filtering.
+            continue
+
+        fltr = _build_data_provider_filter(col_param)
+        if fltr is None:
+            continue
+        filters.append(fltr)
+    return filters
+
+
+def _build_data_provider_filter(col_param):
+    """Builds HyperparameterFilter from ColParam.
+
+    Args:
+      col_param: ColParam that possibly contains filter information.
+
+    Returns:
+      None if col_param does not specify filter information.
+    """
+    if col_param.HasField("filter_regexp"):
+        filter_type = provider.HyperparameterFilterType.REGEX
+        fltr = col_param.filter_regexp
+    elif col_param.HasField("filter_interval"):
+        filter_type = provider.HyperparameterFilterType.INTERVAL
+        fltr = (
+            col_param.filter_interval.min_value,
+            col_param.filter_interval.max_value,
+        )
+    elif col_param.HasField("filter_discrete"):
+        filter_type = provider.HyperparameterFilterType.DISCRETE
+        fltr = [_value_to_python(b) for b in col_param.filter_discrete.values]
+    else:
+        return None
+
+    return provider.HyperparameterFilter(
+        hyperparameter_name=col_param.hparam,
+        filter_type=filter_type,
+        filter=fltr,
+    )
+
+
+def _build_data_provider_sort(col_params):
+    """Builds HyperparameterSorts from ColParams."""
+    sort = []
+    for col_param in col_params:
+        sort_item = _build_data_provider_sort_item(col_param)
+        if sort_item is None:
+            continue
+        sort.append(sort_item)
+    return sort
+
+
+def _build_data_provider_sort_item(col_param):
+    """Builds HyperparameterSort from ColParam.
+
+    Args:
+      col_param: ColParam that possibly contains sort information.
+
+    Returns:
+      None if col_param does not specify sort information.
+    """
+    if col_param.order == api_pb2.ORDER_UNSPECIFIED:
+        return None
+
+    sort_direction = (
+        provider.HyperparameterSortDirection.ASCENDING
+        if col_param.order == api_pb2.ORDER_ASC
+        else provider.HyperparameterSortDirection.DESCENDING
+    )
+    return provider.HyperparameterSort(
+        hyperparameter_name=col_param.hparam,
+        sort_direction=sort_direction,
+    )
+
+
+def _specifies_include(col_params):
+    """Determines whether any `ColParam` contains the `include_in_result` field.
+
+    In the case where none of the col_params contains the field, we should assume
+    that all fields should be included in the response.
+    """
+    return any(
+        col_param.HasField("include_in_result") for col_param in col_params
+    )
+
+
+def _get_hparams_to_include(col_params):
+    """Generates the list of hparams to include in the response.
+
+    The determination is based on the `include_in_result` field in ColParam. If
+    a ColParam either has `include_in_result: True` or does not specify the
+    field at all, then it should be included in the result.
+
+    Args:
+      col_params: A collection of `ColParams` protos.
+
+    Returns:
+      A list of names of hyperparameters to include in the response.
+    """
+    hparams_to_include = []
+    for col_param in col_params:
+        if (
+            col_param.HasField("include_in_result")
+            and not col_param.include_in_result
+        ):
+            # Explicitly set to exclude this hparam.
+            continue
+        if col_param.hparam:
+            hparams_to_include.append(col_param.hparam)
+    return hparams_to_include
+
+
+def _reduce_to_hparams_to_include(session_groups, col_params):
+    """Removes hparams from session_groups that should not be included.
+
+    Args:
+      session_groups: A collection of `SessionGroup` protos, which will be
+        modified in place.
+      col_params: A collection of `ColParams` protos.
+    """
+    hparams_to_include = _get_hparams_to_include(col_params)
+
+    for session_group in session_groups:
+        new_hparams = {
+            hparam: value
+            for (hparam, value) in session_group.hparams.items()
+            if hparam in hparams_to_include
+        }
+
+        session_group.ClearField("hparams")
+        for hparam, value in new_hparams.items():
+            session_group.hparams[hparam].CopyFrom(value)

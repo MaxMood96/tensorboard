@@ -5,7 +5,6 @@ package(default_visibility = ["//tensorboard:internal"])
 tf_sass_binary(
     name = "range_input_styles",
     src = "range_input_component.scss",
-    strict_deps = False,
     deps = [
         "//tensorboard/webapp:angular_material_sass_deps",
         "//tensorboard/webapp/theme",
@@ -28,6 +27,7 @@ tf_ng_module(
         "//tensorboard/webapp/angular:expect_angular_material_slider",
         "@npm//@angular/common",
         "@npm//@angular/core",
+        "@npm//@angular/forms",
         "@npm//rxjs",
     ],
 )
@@ -50,6 +50,7 @@ tf_ts_library(
         "//tensorboard/webapp/angular:expect_angular_material_slider",
         "//tensorboard/webapp/angular:expect_angular_platform_browser_animations",
         "@npm//@angular/core",
+        "@npm//@angular/forms",
         "@npm//@angular/platform-browser",
         "@npm//@types/jasmine",
     ],

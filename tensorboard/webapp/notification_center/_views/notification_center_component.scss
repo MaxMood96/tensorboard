@@ -28,12 +28,14 @@ limitations under the License.
   right: 10px;
   top: 10px;
   width: $_dim;
+  z-index: 2;
 }
 
-::ng-deep .notification-menu.mat-menu-panel {
-  font-size: 13px;
+::ng-deep .notification-menu.mat-mdc-menu-panel {
   max-width: 350px;
   width: 350px;
+  --mat-menu-item-label-text-size: 13px;
+  --mat-menu-item-label-text-line-height: 15px;
 }
 
 .menu-item {
@@ -58,7 +60,6 @@ limitations under the License.
 }
 
 .content-wrapper {
-  line-height: 15px;
   margin-left: 20px;
   margin-top: 15px;
 }

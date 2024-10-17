@@ -34,7 +34,10 @@ section {
   margin: 0 0 12px 0;
 }
 
-section .control-row:not(:last-child) {
+// Add additional margin between most control elements. The exception is when
+// the second control row is a checkbox, in which case we just rely on the
+// padding that is already included in the checkbox.
+section .control-row:not(:has(+ .control-row > mat-checkbox)):not(:last-child) {
   margin-bottom: 12px;
 }
 
@@ -85,24 +88,52 @@ section .control-row:not(:last-child) {
     height: $_dim;
     margin-left: 5px;
     width: $_dim;
+    min-width: $_dim;
+  }
+}
+
+mat-checkbox {
+  // Counteract the padding of the checkbox in order to align it vertically
+  // with other items in the pane.
+  margin-left: -11px;
+
+  ::ng-deep label {
+    @include tb-theme-foreground-prop(color, secondary-text);
+    font-size: 12px;
+    letter-spacing: normal;
+    padding-left: 0px;
+    white-space: nowrap;
   }
 }
 
 mat-slider {
   flex: 1;
   // Reset mat-slider's internal extra space on left/right sides
-  // https://github.com/angular/components/blob/master/src/material/slider/slider.scss#L10
-  margin-left: -8px;
-  margin-right: -8px;
+  // https://github.com/angular/components/blob/8a0196786bb6aa09e17ad84c1a2f035fea4fac5a/src/material/slider/slider.scss#L39
+  margin-left: 0px;
+  margin-right: 0px;
 }
 
 .column-edit-menu-toggle {
   align-items: center;
   display: flex;
   cursor: pointer;
+  font-size: inherit;
+  height: 28px;
+  padding-left: 5px;
+  padding-right: 12px;
+  &.mat-button-wrapper {
+    display: inline-flex;
+    align-items: center;
+  }
+  &.toggle-opened {
+    background-color: mat.get-color-from-palette(mat.$grey-palette, 200);
+    @include tb-dark-theme {
+      background-color: mat.get-color-from-palette(mat.$grey-palette, 800);
+    }
+  }
   mat-icon {
-    height: 15px;
-    width: 15px;
+    margin-right: 6px;
   }
 }
 
@@ -110,12 +141,8 @@ tb-dropdown {
   display: block;
 }
 
-.linked-time {
-  padding: 5px 0;
-}
-
 .control-row {
   .indent {
-    margin-left: 25px;
+    margin-left: 28px;
   }
 }

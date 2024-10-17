@@ -15,26 +15,32 @@ limitations under the License.
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {Store} from '@ngrx/store';
 import {Observable} from 'rxjs';
-import {map} from 'rxjs/operators';
+import {filter, map, shareReplay, startWith, take} from 'rxjs/operators';
 import {RouteKind} from '../../../app_routing/types';
 import {State} from '../../../app_state';
-import {getRegisteredRouteKinds} from '../../../selectors';
+import {
+  getDashboardExperimentNames,
+  getEnableColorByExperiment,
+  getRegisteredRouteKinds,
+} from '../../../selectors';
 import {runGroupByChanged} from '../../actions';
 import {
   getColorGroupRegexString,
   getRunGroupBy,
 } from '../../store/runs_selectors';
-import {GroupBy} from '../../types';
+import {GroupBy, GroupByKey} from '../../types';
 
 /**
  * Renders run grouping menu controls.
  */
 @Component({
+  standalone: false,
   selector: 'runs-group-menu-button',
   template: `
     <runs-group-menu-button-component
       [regexString]="groupByRegexString$ | async"
       [selectedGroupBy]="selectedGroupBy$ | async"
+      [lastRegexGroupByKey]="lastRegexGroupByKey$ | async"
       [showExperimentsGroupBy]="showExperimentsGroupBy$ | async"
       [experimentIds]="experimentIds"
       (onGroupByChange)="onGroupByChange($event)"
@@ -45,29 +51,45 @@ import {GroupBy} from '../../types';
 export class RunsGroupMenuButtonContainer {
   @Input() experimentIds!: string[];
 
-  constructor(private readonly store: Store<State>) {}
-
-  readonly showExperimentsGroupBy$: Observable<boolean> = this.store
-    .select(getRegisteredRouteKinds)
-    .pipe(
-      map((registeredRouteKinds) => {
-        return registeredRouteKinds.has(RouteKind.COMPARE_EXPERIMENT);
-      })
+  constructor(private readonly store: Store<State>) {
+    this.showExperimentsGroupBy$ = this.store
+      .select(getRegisteredRouteKinds)
+      .pipe(
+        map((registeredRouteKinds) => {
+          return registeredRouteKinds.has(RouteKind.COMPARE_EXPERIMENT);
+        })
+      );
+    this.selectedGroupBy$ = this.store.select(getRunGroupBy);
+    this.lastRegexGroupByKey$ = this.store.select(getRunGroupBy).pipe(
+      map((group) => group.key),
+      filter(
+        (key) => key === GroupByKey.REGEX || key === GroupByKey.REGEX_BY_EXP
+      ),
+      startWith(GroupByKey.REGEX)
     );
+    this.groupByRegexString$ = this.store.select(getColorGroupRegexString);
+    this.expNameByExpId$ = this.store.select(getDashboardExperimentNames);
+  }
 
-  readonly selectedGroupBy$: Observable<GroupBy> =
-    this.store.select(getRunGroupBy);
+  readonly showExperimentsGroupBy$: Observable<boolean>;
 
-  readonly groupByRegexString$: Observable<string> = this.store.select(
-    getColorGroupRegexString
-  );
+  readonly selectedGroupBy$: Observable<GroupBy>;
+
+  readonly lastRegexGroupByKey$: Observable<GroupByKey>;
+
+  readonly groupByRegexString$: Observable<string>;
+
+  readonly expNameByExpId$: Observable<Record<string, string>>;
 
   onGroupByChange(groupBy: GroupBy) {
-    this.store.dispatch(
-      runGroupByChanged({
-        experimentIds: this.experimentIds,
-        groupBy,
-      })
-    );
+    this.expNameByExpId$.pipe(take(1)).subscribe((expNameByExpId) => {
+      this.store.dispatch(
+        runGroupByChanged({
+          experimentIds: this.experimentIds,
+          groupBy,
+          expNameByExpId,
+        })
+      );
+    });
   }
 }

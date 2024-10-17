@@ -12,7 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-import {ExperimentId} from './type';
+import {FEATURE_FLAGS_QUERY_STRING_NAME} from '../../webapp/feature_flag/http/const';
+import {getFeatureFlagsToSendToServer} from '../tf_feature_flags/feature-flags';
 import {QueryParams} from './urlPathHelpers';
 
 const EXPERIMENTAL_PLUGINS_QUERY_PARAM = 'experimentalPlugin';
@@ -25,9 +26,13 @@ export interface Router {
     route: string,
     params?: URLSearchParams
   ) => string;
+  pluginRouteForSrc: (
+    pluginName: string,
+    route: string,
+    params?: URLSearchParams
+  ) => string;
   pluginsListing: () => string;
   runs: () => string;
-  runsForExperiment: (id: ExperimentId) => string;
 }
 
 /**
@@ -40,48 +45,42 @@ let _router: Router = createRouter();
 /**
  * Create a router for communicating with the TensorBoard backend. You
  * can pass this to `setRouter` to make it the global router.
- *
- * @param dataDir {string=} The base prefix for data endpoints.
  */
-export function createRouter(
-  dataDir = 'data',
-  urlSearchParams = initialURLSearchParams
-): Router {
-  if (dataDir[dataDir.length - 1] === '/') {
-    dataDir = dataDir.slice(0, dataDir.length - 1);
-  }
+export function createRouter(): Router {
   return {
-    environment: () => createDataPath(dataDir, '/environment'),
-    experiments: () => createDataPath(dataDir, '/experiments'),
+    environment: () => createDataPath('/environment'),
+    experiments: () => createDataPath('/experiments'),
     pluginRoute: (
       pluginName: string,
       route: string,
       params?: URLSearchParams
     ): string => {
-      return createDataPath(
-        dataDir + '/plugin',
-        `/${pluginName}${route}`,
-        params
-      );
+      return createDataPath(`/plugin/${pluginName}${route}`, params);
+    },
+    pluginRouteForSrc: (
+      pluginName: string,
+      route: string,
+      params: URLSearchParams = new URLSearchParams()
+    ): string => {
+      const featureFlags = getFeatureFlagsToSendToServer();
+      if (Object.keys(featureFlags).length > 0) {
+        params.append(
+          FEATURE_FLAGS_QUERY_STRING_NAME,
+          JSON.stringify(featureFlags)
+        );
+      }
+      return createDataPath(`/plugin/${pluginName}${route}`, params);
     },
     pluginsListing: () =>
       createDataPath(
-        dataDir,
         '/plugins_listing',
         createSearchParam({
-          [EXPERIMENTAL_PLUGINS_QUERY_PARAM]: urlSearchParams.getAll(
+          [EXPERIMENTAL_PLUGINS_QUERY_PARAM]: initialURLSearchParams.getAll(
             EXPERIMENTAL_PLUGINS_QUERY_PARAM
           ),
         })
       ),
-    runs: () => createDataPath(dataDir, '/runs'),
-    runsForExperiment: (id) => {
-      return createDataPath(
-        dataDir,
-        '/experiment_runs',
-        createSearchParam({experiment: String(id)})
-      );
-    },
+    runs: () => createDataPath('/runs'),
   };
 }
 
@@ -92,27 +91,11 @@ export function getRouter(): Router {
   return _router;
 }
 
-/**
- * Set the global router, to be returned by future calls to `getRouter`.
- * You may wish to invoke this if you are running a demo server with a
- * custom path prefix, or if you have customized the TensorBoard backend
- * to use a different path.
- *
- * @param {Router} router the new global router
- */
-export function setRouter(router: Router): void {
-  if (router == null) {
-    throw new Error('Router required, but got: ' + router);
-  }
-  _router = router;
-}
-
 function createDataPath(
-  dataDir: string,
   route: string,
   params: URLSearchParams = new URLSearchParams()
 ): string {
-  let relativePath = dataDir + route;
+  let relativePath = 'data' + route;
   if (String(params)) {
     const delimiter = route.includes('?') ? '&' : '?';
     relativePath += delimiter + String(params);

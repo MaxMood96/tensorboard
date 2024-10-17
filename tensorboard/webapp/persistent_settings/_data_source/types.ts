@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 import {TooltipSort} from '../../metrics/types';
+import {ColumnHeader} from '../../widgets/data_table/types';
 
 export enum ThemeValue {
   BROWSER_DEFAULT = 'browser_default',
@@ -43,6 +44,10 @@ export declare interface BackendSettings {
   stepSelectorEnabled?: boolean;
   rangeSelectionEnabled?: boolean;
   linkedTimeEnabled?: boolean;
+  singleSelectionHeaders?: ColumnHeader[];
+  rangeSelectionHeaders?: ColumnHeader[];
+  dashboardDisplayedHparamColumns?: ColumnHeader[];
+  savingPinsEnabled?: boolean;
 }
 
 /**
@@ -65,4 +70,8 @@ export interface PersistableSettings {
   stepSelectorEnabled?: boolean;
   rangeSelectionEnabled?: boolean;
   linkedTimeEnabled?: boolean;
+  singleSelectionHeaders?: ColumnHeader[];
+  rangeSelectionHeaders?: ColumnHeader[];
+  dashboardDisplayedHparamColumns?: ColumnHeader[];
+  savingPinsEnabled?: boolean;
 }

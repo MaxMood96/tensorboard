@@ -31,7 +31,6 @@ import {
   TooltipSort,
   XAxisType,
 } from '../../types';
-import {LinkedTimeSelectionChanged} from './types';
 
 const SLIDER_AUDIT_TIME_MS = 250;
 
@@ -56,6 +55,7 @@ const MAX_SMOOTHING_VALUE = SCALARS_SMOOTHING_MAX;
 const MAX_SMOOTHING_SLIDER_VALUE = 0.99;
 
 @Component({
+  standalone: false,
   selector: 'metrics-dashboard-settings-component',
   templateUrl: 'settings_view_component.ng.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,24 +64,22 @@ const MAX_SMOOTHING_SLIDER_VALUE = 0.99;
 export class SettingsViewComponent {
   constructor(@Inject(LOCALE_ID) private readonly locale: string) {}
 
-  @Input() isLinkedTimeFeatureEnabled!: boolean;
-  @Input() isRangeSelectionAllowed!: boolean;
   @Input() isLinkedTimeEnabled!: boolean;
-  @Input() isScalarStepSelectorFeatureEnabled!: boolean;
   @Input() isScalarStepSelectorEnabled!: boolean;
   @Input() isScalarStepSelectorRangeEnabled!: boolean;
   @Input() isScalarColumnCustomizationEnabled!: boolean;
   @Input() linkedTimeSelection!: TimeSelection | null;
   @Input() stepMinMax!: {min: number; max: number};
   @Input() isSlideOutMenuOpen!: boolean;
+  @Input() isSavingPinsEnabled!: boolean;
+  @Input() globalPinsFeatureEnabled: boolean = false;
 
   @Output() linkedTimeToggled = new EventEmitter<void>();
-  @Output()
-  linkedTimeSelectionChanged = new EventEmitter<LinkedTimeSelectionChanged>();
 
   @Output() stepSelectorToggled = new EventEmitter<void>();
   @Output() rangeSelectionToggled = new EventEmitter<void>();
   @Output() onSlideOutToggled = new EventEmitter<void>();
+  @Output() onEnableSavingPinsToggled = new EventEmitter<void>();
 
   @Input() isImageSupportEnabled!: boolean;
 
@@ -128,7 +126,7 @@ export class SettingsViewComponent {
   readonly MAX_SMOOTHING_SLIDER_VALUE = MAX_SMOOTHING_SLIDER_VALUE;
 
   readonly scalarSmoothingControlChanged$ = new EventEmitter<number>();
-  @Input() scalarSmoothing!: number;
+  @Input() scalarSmoothing: number = 10;
   @Output()
   scalarSmoothingChanged = this.scalarSmoothingControlChanged$.pipe(
     auditTime(SLIDER_AUDIT_TIME_MS)

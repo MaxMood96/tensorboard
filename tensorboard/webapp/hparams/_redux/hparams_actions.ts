@@ -17,36 +17,61 @@ limitations under the License.
  */
 
 import {createAction, props} from '@ngrx/store';
-import {DiscreteHparamValues} from '../types';
+import {
+  AddColumnEvent,
+  ReorderColumnEvent,
+} from '../../widgets/data_table/types';
+import {HparamSpec, SessionGroup, ColumnHeader} from '../types';
+import {HparamFilter, MetricFilter} from './types';
 
-export const hparamsDiscreteHparamFilterChanged = createAction(
-  '[Hparams] Hparams Discrete Hparam Filter Changed',
+export const hparamsFetchSessionGroupsSucceeded = createAction(
+  '[Hparams] Hparams Fetch Session Groups Succeeded',
   props<{
-    experimentIds: string[];
-    hparamName: string;
-    filterValues: DiscreteHparamValues;
-    includeUndefined: boolean;
+    hparamSpecs: HparamSpec[];
+    sessionGroups: SessionGroup[];
   }>()
 );
 
-export const hparamsIntervalHparamFilterChanged = createAction(
-  '[Hparams] Hparams Interval Hparam Filter Changed',
-  props<{
-    experimentIds: string[];
-    hparamName: string;
-    filterLowerValue: number;
-    filterUpperValue: number;
-    includeUndefined: boolean;
-  }>()
+export const dashboardHparamFilterAdded = createAction(
+  '[Hparams] Dashboard Hparam Filter Added',
+  props<{name: string; filter: HparamFilter}>()
 );
 
-export const hparamsMetricFilterChanged = createAction(
-  '[Hparams] Hparams Metric Filter Changed',
-  props<{
-    experimentIds: string[];
-    metricTag: string;
-    filterLowerValue: number;
-    filterUpperValue: number;
-    includeUndefined: boolean;
-  }>()
+export const dashboardMetricFilterAdded = createAction(
+  '[Hparams] Dashboard Metric Filter Added',
+  props<{name: string; filter: MetricFilter}>()
+);
+
+export const dashboardHparamFilterRemoved = createAction(
+  '[Hparams] Dashboard Hparam Filter Removed',
+  props<{name: string}>()
+);
+
+export const dashboardMetricFilterRemoved = createAction(
+  '[Hparams] Dashboard Metric Filter Removed',
+  props<{name: string}>()
+);
+
+export const dashboardHparamColumnAdded = createAction(
+  '[Hparams] Dashboard Hparam Column Added',
+  props<AddColumnEvent>()
+);
+
+export const dashboardHparamColumnRemoved = createAction(
+  '[Hparams] Dashboard Hparam Column Removed',
+  props<{column: ColumnHeader}>()
+);
+
+export const dashboardHparamColumnToggled = createAction(
+  '[Hparams] Dashboard Hparam Column Toggled',
+  props<{column: ColumnHeader}>()
+);
+
+export const dashboardHparamColumnOrderChanged = createAction(
+  '[Hparams] Dashboard Hparam Column Order Changed',
+  props<ReorderColumnEvent>()
+);
+
+export const loadAllDashboardHparams = createAction(
+  '[Hparams] Load all Hparams'
 );

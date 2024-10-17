@@ -74,6 +74,13 @@ export function getExperimentIdsFromRouteParams(
       }
       return [DEFAULT_EXPERIMENT_ID];
     }
+    case RouteKind.CARD: {
+      const experimentIds = (params as CompareRouteParams).experimentIds;
+      if (experimentIds.indexOf(',') < 0) {
+        return [experimentIds];
+      }
+      return parseCompareExperimentStr(experimentIds).map(({id}) => id);
+    }
     case RouteKind.COMPARE_EXPERIMENT: {
       const typedParams = params as CompareRouteParams;
       return parseCompareExperimentStr(typedParams.experimentIds).map(
@@ -175,11 +182,11 @@ export function getDeepLinkGroup(routeKind: RouteKind): DeepLinkGroup | null {
     case RouteKind.EXPERIMENTS:
       return DeepLinkGroup.EXPERIMENTS;
     case RouteKind.EXPERIMENT:
+    case RouteKind.CARD:
     case RouteKind.COMPARE_EXPERIMENT:
       return DeepLinkGroup.DASHBOARD;
     case RouteKind.UNKNOWN:
     case RouteKind.NOT_SET:
-    case RouteKind.FLAGS:
       return null;
   }
 }

@@ -31,6 +31,7 @@ import {TimeSelection, XAxisType} from '../../types';
 import {TimeSelectionView} from './utils';
 
 @Component({
+  standalone: false,
   selector: 'histogram-card-component',
   templateUrl: 'histogram_card_component.ng.html',
   styleUrls: ['histogram_card_component.css'],
@@ -47,7 +48,7 @@ export class HistogramCardComponent {
   @Input() mode!: HistogramMode;
   @Input() xAxisType!: XAxisType;
   @Input() runColorScale!: RunColorScale;
-  @Input() showFullSize!: boolean;
+  @Input() showFullWidth!: boolean;
   @Input() isPinned!: boolean;
   @Input() linkedTimeSelection!: TimeSelectionView | null;
   @Input() isClosestStepHighlighted!: boolean | null;

@@ -13,32 +13,77 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-import {Component, Input, ViewChild} from '@angular/core';
+import {
+  ApplicationRef,
+  Component,
+  EventEmitter,
+  Input,
+  Output,
+  ViewChild,
+} from '@angular/core';
 import {ComponentFixture, TestBed} from '@angular/core/testing';
-import {MatIconModule} from '@angular/material/icon';
+import {MatIconTestingModule} from '../../testing/mat_icon_module';
 import {By} from '@angular/platform-browser';
 import {
   ColumnHeader,
   ColumnHeaderType,
-  SelectedStepRunData,
+  TableData,
   SortingInfo,
   SortingOrder,
-} from '../../metrics/views/card_renderer/scalar_card_types';
+  DiscreteFilter,
+  IntervalFilter,
+  DomainType,
+  Side,
+} from './types';
 import {DataTableComponent} from './data_table_component';
 import {DataTableModule} from './data_table_module';
+import {HeaderCellComponent} from './header_cell_component';
+import {NoopAnimationsModule} from '@angular/platform-browser/animations';
+import {ColumnSelectorComponent} from './column_selector_component';
+import {ContentCellComponent} from './content_cell_component';
+import {ColumnSelectorModule} from './column_selector_module';
+import {FilterDialog} from './filter_dialog_component';
+import {CustomModal} from '../custom_modal/custom_modal';
+
+const ADD_BUTTON_PREDICATE = By.css('.add-button');
 
 @Component({
+  standalone: false,
   selector: 'testable-comp',
   template: `
     <tb-data-table
       #DataTable
       [headers]="headers"
-      [data]="data"
       [sortingInfo]="sortingInfo"
-      [smoothingEnabled]="smoothingEnabled"
+      [selectableColumns]="selectableColumns"
+      [columnFilters]="columnFilters"
+      [loading]="loading"
       (sortDataBy)="sortDataBy($event)"
       (orderColumns)="orderColumns($event)"
-    ></tb-data-table>
+      (addColumn)="addColumn.emit($event)"
+      (removeColumn)="removeColumn.emit($event)"
+    >
+      <ng-container header>
+        <ng-container *ngFor="let header of headers">
+          <tb-data-table-header-cell
+            [header]="header"
+            [sortingInfo]="sortingInfo"
+          ></tb-data-table-header-cell> </ng-container
+      ></ng-container>
+      <ng-container content>
+        <ng-container *ngFor="let dataRow of data">
+          <tb-data-table-content-row>
+            <ng-container *ngFor="let header of headers">
+              <tb-data-table-content-cell
+                *ngIf="header.enabled"
+                [header]="header"
+                [datum]="dataRow[header.name]"
+              ></tb-data-table-content-cell>
+            </ng-container>
+          </tb-data-table-content-row>
+        </ng-container>
+      </ng-container>
+    </tb-data-table>
   `,
 })
 class TestableComponent {
@@ -46,12 +91,23 @@ class TestableComponent {
   dataTable!: DataTableComponent;
 
   @Input() headers!: ColumnHeader[];
-  @Input() data!: SelectedStepRunData[];
+  @Input() data!: TableData[];
   @Input() sortingInfo!: SortingInfo;
   @Input() smoothingEnabled!: boolean;
 
   @Input() sortDataBy!: (sortingInfo: SortingInfo) => void;
   @Input() orderColumns!: (newOrder: ColumnHeaderType[]) => void;
+  @Input() selectableColumns!: ColumnHeader[];
+  @Input() columnFilters!: Map<string, DiscreteFilter | IntervalFilter>;
+  @Input() loading!: boolean;
+
+  @Output() addColumn = new EventEmitter<{
+    header: ColumnHeader;
+    index?: number;
+  }>();
+  @Output() removeColumn = new EventEmitter<ColumnHeader>();
+
+  constructor(readonly customModal: CustomModal) {}
 }
 
 describe('data table', () => {
@@ -59,35 +115,70 @@ describe('data table', () => {
   let orderColumnsSpy: jasmine.Spy;
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [TestableComponent, DataTableComponent],
-      imports: [MatIconModule, DataTableModule],
+      declarations: [
+        TestableComponent,
+        DataTableComponent,
+        HeaderCellComponent,
+      ],
+      imports: [
+        MatIconTestingModule,
+        DataTableModule,
+        ColumnSelectorModule,
+        NoopAnimationsModule,
+      ],
     }).compileComponents();
+  });
+
+  afterAll(() => {
+    // These elements are being left in the dom from the tooltip. Removing them
+    // to prevent them from affecting other tests.
+    document
+      .querySelectorAll('.cdk-describedby-message-container')
+      .forEach((el) => {
+        el.remove();
+      });
   });
 
   function createComponent(input: {
     headers?: ColumnHeader[];
-    data?: SelectedStepRunData[];
     sortingInfo?: SortingInfo;
-    smoothingEnabled?: boolean;
+    data?: TableData[];
+    potentialColumns?: ColumnHeader[];
+    columnFilters?: Map<string, DiscreteFilter | IntervalFilter>;
+    loading?: boolean;
   }): ComponentFixture<TestableComponent> {
     const fixture = TestBed.createComponent(TestableComponent);
 
     fixture.componentInstance.headers = input.headers || [];
-    fixture.componentInstance.data = input.data || [];
     fixture.componentInstance.sortingInfo = input.sortingInfo || {
-      header: ColumnHeaderType.RUN,
+      name: 'run',
       order: SortingOrder.ASCENDING,
     };
 
-    fixture.componentInstance.smoothingEnabled =
-      input.smoothingEnabled === undefined ? true : input.smoothingEnabled;
+    if (input.data) {
+      fixture.componentInstance.data = input.data;
+    }
+
+    if (input.potentialColumns) {
+      fixture.componentInstance.selectableColumns = input.potentialColumns;
+    }
+
+    if (input.loading !== undefined) {
+      fixture.componentInstance.loading = input.loading;
+    }
+
+    fixture.componentInstance.columnFilters = input.columnFilters || new Map();
 
     sortDataBySpy = jasmine.createSpy();
     fixture.componentInstance.sortDataBy = sortDataBySpy;
 
     orderColumnsSpy = jasmine.createSpy();
     fixture.componentInstance.orderColumns = orderColumnsSpy;
+    fixture.detectChanges();
 
+    // Add component to app ref for modal testing.
+    const appRef = TestBed.inject(ApplicationRef);
+    appRef.components.push(fixture.componentRef);
     return fixture;
   }
 
@@ -98,212 +189,102 @@ describe('data table', () => {
     expect(dataTable).toBeTruthy();
   });
 
-  it('displays given headers in order', () => {
-    const fixture = createComponent({
-      headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
-        {type: ColumnHeaderType.RELATIVE_TIME, enabled: true},
-        {type: ColumnHeaderType.VALUE_CHANGE, enabled: true},
-        {type: ColumnHeaderType.START_STEP, enabled: true},
-        {type: ColumnHeaderType.END_STEP, enabled: true},
-        {type: ColumnHeaderType.START_VALUE, enabled: true},
-        {type: ColumnHeaderType.END_VALUE, enabled: true},
-        {type: ColumnHeaderType.MIN_VALUE, enabled: true},
-        {type: ColumnHeaderType.MAX_VALUE, enabled: true},
-        {type: ColumnHeaderType.PERCENTAGE_CHANGE, enabled: true},
-        {type: ColumnHeaderType.SMOOTHED, enabled: true},
-      ],
-    });
+  it('renders spinner when loading', () => {
+    const fixture = createComponent({loading: true});
     fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
-
-    // The first header should always be blank as it is the run color column.
-    expect(headerElements[0].nativeElement.innerText).toBe('');
-    expect(headerElements[1].nativeElement.innerText).toBe('Value');
-    expect(headerElements[2].nativeElement.innerText).toBe('Run');
-    expect(headerElements[3].nativeElement.innerText).toBe('Step');
-    expect(headerElements[4].nativeElement.innerText).toBe('Relative');
-    expect(headerElements[5].nativeElement.innerText).toBe('Value');
-    expect(
-      headerElements[5]
-        .queryAll(By.css('mat-icon'))[0]
-        .nativeElement.getAttribute('svgIcon')
-    ).toBe('change_history_24px');
-    expect(headerElements[6].nativeElement.innerText).toBe('Start Step');
-    expect(headerElements[7].nativeElement.innerText).toBe('End Step');
-    expect(headerElements[8].nativeElement.innerText).toBe('Start Value');
-    expect(headerElements[9].nativeElement.innerText).toBe('End Value');
-    expect(headerElements[10].nativeElement.innerText).toBe('Min');
-    expect(headerElements[11].nativeElement.innerText).toBe('Max');
-    expect(headerElements[12].nativeElement.innerText).toBe('%');
-    expect(
-      headerElements[12]
-        .queryAll(By.css('mat-icon'))[0]
-        .nativeElement.getAttribute('svgIcon')
-    ).toBe('change_history_24px');
-    expect(headerElements[13].nativeElement.innerText).toBe('Smoothed');
+    const spinner = fixture.debugElement.query(By.css('.loading'));
+    expect(spinner).toBeTruthy();
   });
 
-  it('displays data in order', () => {
+  it('does not renders spinner when not loading', () => {
+    const fixture = createComponent({loading: false});
+    fixture.detectChanges();
+    const spinner = fixture.debugElement.query(By.css('.loading'));
+    expect(spinner).toBeFalsy();
+  });
+
+  it('emits sortDataBy event when header emits headerClicked event', () => {
     const fixture = createComponent({
       headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
-        {type: ColumnHeaderType.RELATIVE_TIME, enabled: true},
-        {type: ColumnHeaderType.VALUE_CHANGE, enabled: true},
-        {type: ColumnHeaderType.START_STEP, enabled: true},
-        {type: ColumnHeaderType.END_STEP, enabled: true},
-        {type: ColumnHeaderType.START_VALUE, enabled: true},
-        {type: ColumnHeaderType.END_VALUE, enabled: true},
-        {type: ColumnHeaderType.MIN_VALUE, enabled: true},
-        {type: ColumnHeaderType.MAX_VALUE, enabled: true},
-        {type: ColumnHeaderType.PERCENTAGE_CHANGE, enabled: true},
-        {type: ColumnHeaderType.SMOOTHED, enabled: true},
-      ],
-      data: [
         {
-          id: 'someid',
-          RUN: 'run name',
-          VALUE: 3,
-          STEP: 1,
-          RELATIVE_TIME: 123,
-          VALUE_CHANGE: -20,
-          START_STEP: 5,
-          END_STEP: 30,
-          START_VALUE: 13,
-          END_VALUE: 23,
-          MIN_VALUE: 1,
-          MAX_VALUE: 500,
-          PERCENTAGE_CHANGE: 0.3,
-          SMOOTHED: 2,
+          type: ColumnHeaderType.VALUE,
+          name: 'value',
+          displayName: 'Value',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.STEP,
+          name: 'step',
+          displayName: 'Step',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.RELATIVE_TIME,
+          name: 'relativeTime',
+          displayName: 'Relative',
+          enabled: true,
         },
       ],
     });
     fixture.detectChanges();
-    const dataElements = fixture.debugElement.queryAll(By.css('td'));
+    const headerElements = fixture.debugElement.queryAll(
+      By.directive(HeaderCellComponent)
+    );
 
-    // The first header should always be blank as it is the run color column.
-    expect(dataElements[0].nativeElement.innerText).toBe('');
-    expect(dataElements[1].nativeElement.innerText).toBe('3');
-    expect(dataElements[2].nativeElement.innerText).toBe('run name');
-    expect(dataElements[3].nativeElement.innerText).toBe('1');
-    expect(dataElements[4].nativeElement.innerText).toBe('123 ms');
-    expect(dataElements[5].nativeElement.innerText).toBe('20');
-    expect(dataElements[5].queryAll(By.css('mat-icon')).length).toBe(1);
-    expect(
-      dataElements[5]
-        .queryAll(By.css('mat-icon'))[0]
-        .nativeElement.getAttribute('svgIcon')
-    ).toBe('arrow_downward_24px');
-    expect(dataElements[6].nativeElement.innerText).toBe('5');
-    expect(dataElements[7].nativeElement.innerText).toBe('30');
-    expect(dataElements[8].nativeElement.innerText).toBe('13');
-    expect(dataElements[9].nativeElement.innerText).toBe('23');
-    expect(dataElements[10].nativeElement.innerText).toBe('1');
-    expect(dataElements[11].nativeElement.innerText).toBe('500');
-    expect(dataElements[12].nativeElement.innerText).toBe('30%');
-    expect(dataElements[12].queryAll(By.css('mat-icon')).length).toBe(1);
-    expect(
-      dataElements[12]
-        .queryAll(By.css('mat-icon'))[0]
-        .nativeElement.getAttribute('svgIcon')
-    ).toBe('arrow_upward_24px');
-    expect(dataElements[13].nativeElement.innerText).toBe('2');
-  });
-
-  it('does not displays headers or data when header is disabled', () => {
-    const fixture = createComponent({
-      headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: false},
-        {type: ColumnHeaderType.STEP, enabled: true},
-      ],
-      data: [
-        {
-          id: 'someid',
-          RUN: 'run name',
-          VALUE: 3,
-          STEP: 1,
-        },
-      ],
-    });
-    fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
-    const dataElements = fixture.debugElement.queryAll(By.css('td'));
-
-    // The first header should always be blank as it is the run color column.
-    expect(headerElements[0].nativeElement.innerText).toBe('');
-    expect(headerElements[1].nativeElement.innerText).toBe('Value');
-    expect(headerElements[2].nativeElement.innerText).toBe('Step');
-
-    // The first column should always be blank as it is the run color column.
-    expect(dataElements[0].nativeElement.innerText).toBe('');
-    expect(dataElements[1].nativeElement.innerText).toBe('3');
-    expect(dataElements[2].nativeElement.innerText).toBe('1');
-  });
-
-  it('displays nothing when no data is available', () => {
-    const fixture = createComponent({
-      headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
-        {type: ColumnHeaderType.RELATIVE_TIME, enabled: true},
-      ],
-      data: [{id: 'someid'}],
-    });
-    fixture.detectChanges();
-    const dataElements = fixture.debugElement.queryAll(By.css('td'));
-
-    // The first header should always be blank as it is the run color column.
-    expect(dataElements[0].nativeElement.innerText).toBe('');
-    expect(dataElements[1].nativeElement.innerText).toBe('');
-    expect(dataElements[2].nativeElement.innerText).toBe('');
-    expect(dataElements[3].nativeElement.innerText).toBe('');
-    expect(dataElements[4].nativeElement.innerText).toBe('');
-  });
-
-  it('emits sortDataBy event when header clicked', () => {
-    const fixture = createComponent({
-      headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
-        {type: ColumnHeaderType.RELATIVE_TIME, enabled: true},
-      ],
-    });
-    fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
-
-    headerElements[3].triggerEventHandler('click', {});
+    headerElements[3].componentInstance.headerClicked.emit('step');
     expect(sortDataBySpy).toHaveBeenCalledOnceWith({
-      header: ColumnHeaderType.STEP,
+      name: 'step',
       order: SortingOrder.ASCENDING,
     });
   });
 
-  it('emits sortDataBy event with DESCENDING when header that is currently sorted is clicked', () => {
+  it('emits sortDataBy event with DESCENDING when header that is currently sorted emits headerClick event', () => {
     const fixture = createComponent({
       headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
-        {type: ColumnHeaderType.RELATIVE_TIME, enabled: true},
+        {
+          type: ColumnHeaderType.VALUE,
+          name: 'value',
+          displayName: 'Value',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.STEP,
+          name: 'step',
+          displayName: 'Step',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.RELATIVE_TIME,
+          name: 'relativeTime',
+          displayName: 'Relative',
+          enabled: true,
+        },
       ],
       sortingInfo: {
-        header: ColumnHeaderType.STEP,
+        name: 'step',
         order: SortingOrder.ASCENDING,
       },
     });
     fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
+    const headerElements = fixture.debugElement.queryAll(
+      By.directive(HeaderCellComponent)
+    );
 
-    headerElements[3].triggerEventHandler('click', {});
+    headerElements[3].componentInstance.headerClicked.emit('step');
     expect(sortDataBySpy).toHaveBeenCalledOnceWith({
-      header: ColumnHeaderType.STEP,
+      name: 'step',
       order: SortingOrder.DESCENDING,
     });
   });
@@ -311,46 +292,66 @@ describe('data table', () => {
   it('keeps sorting arrow invisible unless sorting on that header', () => {
     const fixture = createComponent({
       headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
+        {
+          type: ColumnHeaderType.VALUE,
+          name: 'value',
+          displayName: 'Value',
+          enabled: true,
+          sortable: true,
+        },
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
+          sortable: true,
+        },
+        {
+          type: ColumnHeaderType.STEP,
+          name: 'step',
+          displayName: 'Step',
+          enabled: true,
+          sortable: true,
+        },
       ],
       sortingInfo: {
-        header: ColumnHeaderType.VALUE,
+        name: 'value',
         order: SortingOrder.ASCENDING,
       },
     });
     fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
+    const headerElements = fixture.debugElement.queryAll(
+      By.directive(HeaderCellComponent)
+    );
 
     expect(
-      headerElements[1]
-        .queryAll(By.css('mat-icon'))[0]
+      headerElements[0]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.classList.contains('show')
     ).toBe(true);
     expect(
-      headerElements[1]
-        .queryAll(By.css('mat-icon'))[0]
+      headerElements[0]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.getAttribute('svgIcon')
     ).toBe('arrow_upward_24px');
     expect(
-      headerElements[2]
-        .queryAll(By.css('mat-icon'))[0]
+      headerElements[1]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.classList.contains('show')
     ).toBe(false);
     expect(
-      headerElements[2]
-        .queryAll(By.css('mat-icon'))[0]
+      headerElements[1]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.classList.contains('show-on-hover')
     ).toBe(true);
     expect(
-      headerElements[3]
-        .queryAll(By.css('mat-icon'))[0]
+      headerElements[2]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.classList.contains('show')
     ).toBe(false);
     expect(
-      headerElements[3]
-        .queryAll(By.css('mat-icon'))[0]
+      headerElements[2]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.classList.contains('show-on-hover')
     ).toBe(true);
   });
@@ -358,46 +359,66 @@ describe('data table', () => {
   it('shows downward arrow when order is DESCENDING', () => {
     const fixture = createComponent({
       headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
+        {
+          type: ColumnHeaderType.VALUE,
+          name: 'value',
+          displayName: 'Value',
+          enabled: true,
+          sortable: true,
+        },
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
+          sortable: true,
+        },
+        {
+          type: ColumnHeaderType.STEP,
+          name: 'step',
+          displayName: 'Step',
+          enabled: true,
+          sortable: true,
+        },
       ],
       sortingInfo: {
-        header: ColumnHeaderType.STEP,
+        name: 'step',
         order: SortingOrder.DESCENDING,
       },
     });
     fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
+    const headerElements = fixture.debugElement.queryAll(
+      By.directive(HeaderCellComponent)
+    );
 
     expect(
+      headerElements[0]
+        .query(By.css('.sorting-icon-container mat-icon'))
+        .nativeElement.classList.contains('show')
+    ).toBe(false);
+    expect(
+      headerElements[0]
+        .query(By.css('.sorting-icon-container mat-icon'))
+        .nativeElement.classList.contains('show-on-hover')
+    ).toBe(true);
+    expect(
       headerElements[1]
-        .queryAll(By.css('mat-icon'))[0]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.classList.contains('show')
     ).toBe(false);
     expect(
       headerElements[1]
-        .queryAll(By.css('mat-icon'))[0]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.classList.contains('show-on-hover')
     ).toBe(true);
     expect(
       headerElements[2]
-        .queryAll(By.css('mat-icon'))[0]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.classList.contains('show')
-    ).toBe(false);
+    ).toBe(true);
     expect(
       headerElements[2]
-        .queryAll(By.css('mat-icon'))[0]
-        .nativeElement.classList.contains('show-on-hover')
-    ).toBe(true);
-    expect(
-      headerElements[3]
-        .queryAll(By.css('mat-icon'))[0]
-        .nativeElement.classList.contains('show')
-    ).toBe(true);
-    expect(
-      headerElements[3]
-        .queryAll(By.css('mat-icon'))[0]
+        .query(By.css('.sorting-icon-container mat-icon'))
         .nativeElement.getAttribute('svgIcon')
     ).toBe('arrow_downward_24px');
   });
@@ -405,111 +426,655 @@ describe('data table', () => {
   it('emits orderColumns with new order when dragged left', () => {
     const fixture = createComponent({
       headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
+        {
+          type: ColumnHeaderType.VALUE,
+          name: 'value',
+          displayName: 'Value',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.SMOOTHED,
+          name: 'smoothed',
+          displayName: 'Smoothed',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.STEP,
+          name: 'step',
+          displayName: 'Step',
+          enabled: true,
+        },
       ],
       sortingInfo: {
-        header: ColumnHeaderType.STEP,
+        name: 'step',
         order: SortingOrder.DESCENDING,
       },
     });
     fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
+    const headerElements = fixture.debugElement.queryAll(
+      By.directive(HeaderCellComponent)
+    );
 
-    headerElements[2].query(By.css('.cell')).triggerEventHandler('dragstart');
-    headerElements[1].query(By.css('.cell')).triggerEventHandler('dragenter');
+    headerElements[1].query(By.css('.cell')).triggerEventHandler('dragstart');
+    headerElements[0].query(By.css('.cell')).triggerEventHandler('dragenter');
     fixture.detectChanges();
     expect(
-      headerElements[1]
+      headerElements[0]
         .query(By.css('.cell'))
         .nativeElement.classList.contains('highlight')
     ).toBe(true);
     expect(
-      headerElements[1]
+      headerElements[0]
         .query(By.css('.cell'))
         .nativeElement.classList.contains('highlight-border-left')
     ).toBe(true);
-    headerElements[2].query(By.css('.cell')).triggerEventHandler('dragend');
+    headerElements[1].query(By.css('.cell')).triggerEventHandler('dragend');
 
-    expect(orderColumnsSpy).toHaveBeenCalledOnceWith([
-      {type: ColumnHeaderType.RUN, enabled: true},
-      {type: ColumnHeaderType.VALUE, enabled: true},
-      {type: ColumnHeaderType.STEP, enabled: true},
-    ]);
+    expect(orderColumnsSpy).toHaveBeenCalledOnceWith({
+      source: {
+        type: ColumnHeaderType.SMOOTHED,
+        name: 'smoothed',
+        displayName: 'Smoothed',
+        enabled: true,
+      },
+      destination: {
+        type: ColumnHeaderType.VALUE,
+        name: 'value',
+        displayName: 'Value',
+        enabled: true,
+      },
+      side: Side.LEFT,
+    });
   });
 
   it('emits orderColumns with new order when dragged right', () => {
     const fixture = createComponent({
       headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
+        {
+          type: ColumnHeaderType.VALUE,
+          name: 'value',
+          displayName: 'Value',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.SMOOTHED,
+          name: 'smoothed',
+          displayName: 'Smoothed',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.STEP,
+          name: 'step',
+          displayName: 'Step',
+          enabled: true,
+        },
       ],
       sortingInfo: {
-        header: ColumnHeaderType.STEP,
+        name: 'step',
         order: SortingOrder.DESCENDING,
       },
     });
     fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
+    const headerElements = fixture.debugElement.queryAll(
+      By.directive(HeaderCellComponent)
+    );
 
-    headerElements[2].query(By.css('.cell')).triggerEventHandler('dragstart');
-    headerElements[3].query(By.css('.cell')).triggerEventHandler('dragenter');
+    headerElements[1].query(By.css('.cell')).triggerEventHandler('dragstart');
+    headerElements[2].query(By.css('.cell')).triggerEventHandler('dragenter');
     fixture.detectChanges();
     expect(
-      headerElements[3]
+      headerElements[2]
         .query(By.css('.cell'))
         .nativeElement.classList.contains('highlight')
     ).toBe(true);
     expect(
-      headerElements[3]
+      headerElements[2]
         .query(By.css('.cell'))
         .nativeElement.classList.contains('highlight-border-right')
     ).toBe(true);
-    headerElements[2].query(By.css('.cell')).triggerEventHandler('dragend');
+    headerElements[1].query(By.css('.cell')).triggerEventHandler('dragend');
 
-    expect(orderColumnsSpy).toHaveBeenCalledOnceWith([
-      {type: ColumnHeaderType.VALUE, enabled: true},
-      {type: ColumnHeaderType.STEP, enabled: true},
-      {type: ColumnHeaderType.RUN, enabled: true},
-    ]);
+    expect(orderColumnsSpy).toHaveBeenCalledOnceWith({
+      source: {
+        type: ColumnHeaderType.SMOOTHED,
+        name: 'smoothed',
+        displayName: 'Smoothed',
+        enabled: true,
+      },
+      destination: {
+        type: ColumnHeaderType.STEP,
+        name: 'step',
+        displayName: 'Step',
+        enabled: true,
+      },
+      side: Side.RIGHT,
+    });
   });
 
-  it('does not display Smoothed column when smoothingEnabled is false', () => {
+  it('does not emit orderColumns when dragging between column groups', () => {
     const fixture = createComponent({
       headers: [
-        {type: ColumnHeaderType.VALUE, enabled: true},
-        {type: ColumnHeaderType.RUN, enabled: true},
-        {type: ColumnHeaderType.SMOOTHED, enabled: true},
-        {type: ColumnHeaderType.STEP, enabled: true},
-      ],
-      data: [
         {
-          id: 'someid',
-          RUN: 'run name',
-          VALUE: 3,
-          STEP: 1,
-          SMOOTHED: 2,
+          type: ColumnHeaderType.VALUE,
+          name: 'value',
+          displayName: 'Value',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.SMOOTHED,
+          name: 'smoothed',
+          displayName: 'Smoothed',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
         },
       ],
-      smoothingEnabled: false,
+      sortingInfo: {
+        name: 'step',
+        order: SortingOrder.DESCENDING,
+      },
     });
     fixture.detectChanges();
-    const headerElements = fixture.debugElement.queryAll(By.css('th'));
-    const dataElements = fixture.debugElement.queryAll(By.css('td'));
+    const headerElements = fixture.debugElement.queryAll(
+      By.directive(HeaderCellComponent)
+    );
 
-    // The first header should always be blank as it is the run color column.
-    expect(headerElements[0].nativeElement.innerText).toBe('');
-    expect(headerElements[1].nativeElement.innerText).toBe('Value');
-    expect(headerElements[2].nativeElement.innerText).toBe('Run');
-    expect(headerElements[3].nativeElement.innerText).toBe('Step');
-    expect(headerElements.length).toBe(4);
+    headerElements[1].query(By.css('.cell')).triggerEventHandler('dragstart');
+    headerElements[2].query(By.css('.cell')).triggerEventHandler('dragenter');
+    fixture.detectChanges();
+    expect(
+      headerElements[2]
+        .query(By.css('.cell'))
+        .nativeElement.classList.contains('highlight')
+    ).toBe(false);
+    headerElements[1].query(By.css('.cell')).triggerEventHandler('dragend');
 
-    expect(dataElements[0].nativeElement.innerText).toBe('');
-    expect(dataElements[1].nativeElement.innerText).toBe('3');
-    expect(dataElements[2].nativeElement.innerText).toBe('run name');
-    expect(dataElements[3].nativeElement.innerText).toBe('1');
-    expect(dataElements.length).toBe(4);
+    expect(orderColumnsSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not show add button when there are no selectable columns', () => {
+    const fixture = createComponent({});
+    expect(fixture.debugElement.query(ADD_BUTTON_PREDICATE)).toBeNull();
+  });
+
+  it('renders column selector when + button is clicked', () => {
+    const fixture = createComponent({
+      potentialColumns: [
+        {
+          type: ColumnHeaderType.HPARAM,
+          name: 'lr',
+          displayName: 'learning rate',
+          enabled: false,
+        },
+      ],
+    });
+    expect(
+      fixture.debugElement.query(By.directive(ColumnSelectorComponent))
+    ).toBeNull();
+    const addBtn = fixture.debugElement.query(ADD_BUTTON_PREDICATE);
+    addBtn.nativeElement.click();
+    expect(
+      fixture.debugElement.query(By.directive(ColumnSelectorComponent))
+    ).toBeDefined();
+  });
+
+  describe('context menu', () => {
+    let mockTableData: TableData[];
+    let mockHeaders: ColumnHeader[];
+    let mockPotentialColumns: ColumnHeader[];
+
+    beforeEach(() => {
+      mockHeaders = [
+        {
+          name: 'run',
+          type: ColumnHeaderType.RUN,
+          displayName: 'Run',
+          enabled: true,
+          movable: true,
+          sortable: true,
+        },
+        {
+          name: 'disabled_header',
+          type: ColumnHeaderType.MAX_VALUE,
+          displayName: 'disabled',
+          enabled: false,
+          removable: true,
+          movable: true,
+        },
+        {
+          name: 'other_header',
+          type: ColumnHeaderType.HPARAM,
+          displayName: 'Hparam 1',
+          enabled: true,
+          removable: true,
+          movable: true,
+        },
+        {
+          name: 'another_hparam',
+          type: ColumnHeaderType.HPARAM,
+          displayName: 'Hparam 2',
+          enabled: true,
+          removable: true,
+          movable: false,
+          filterable: true,
+        },
+        {
+          name: 'some static column',
+          type: ColumnHeaderType.MEAN,
+          displayName: 'cant touch this',
+          enabled: true,
+        },
+      ];
+      mockTableData = [
+        {
+          id: 'runid',
+          run: 'run name',
+          disabled_header: 'disabled header',
+          other_header: 'other header',
+        },
+      ];
+      mockPotentialColumns = [
+        {
+          type: ColumnHeaderType.HPARAM,
+          name: 'lr',
+          displayName: 'Learning Rate',
+          enabled: false,
+        },
+      ];
+    });
+    it('renders context menu when a column cell is clicked', () => {
+      const fixture = createComponent({
+        headers: mockHeaders,
+        data: mockTableData,
+        potentialColumns: mockPotentialColumns,
+      });
+      expect(fixture.debugElement.query(By.css('.context-menu'))).toBeNull();
+      const cell = fixture.debugElement.query(
+        By.directive(ContentCellComponent)
+      );
+      cell.nativeElement.dispatchEvent(new MouseEvent('contextmenu'));
+      fixture.detectChanges();
+
+      expect(
+        fixture.debugElement.query(By.css('.context-menu'))
+      ).not.toBeNull();
+    });
+
+    it('renders context menu when a column header is clicked', () => {
+      const fixture = createComponent({
+        headers: mockHeaders,
+        data: mockTableData,
+        potentialColumns: mockPotentialColumns,
+      });
+      expect(fixture.debugElement.query(By.css('.context-menu'))).toBeNull();
+      const cell = fixture.debugElement.query(
+        By.directive(HeaderCellComponent)
+      );
+
+      cell.nativeElement.dispatchEvent(new MouseEvent('contextmenu'));
+      fixture.detectChanges();
+
+      expect(
+        fixture.debugElement.query(By.css('.context-menu'))
+      ).not.toBeNull();
+    });
+
+    it('renders column selector when add column to the left is clicked', () => {
+      const fixture = createComponent({
+        headers: mockHeaders,
+        data: mockTableData,
+        potentialColumns: mockPotentialColumns,
+      });
+      const cell = fixture.debugElement
+        .queryAll(By.directive(HeaderCellComponent))
+        .find((cell) => cell.nativeElement.innerHTML.includes('Hparam 1'))!;
+
+      cell.nativeElement.dispatchEvent(new MouseEvent('contextmenu'));
+      fixture.detectChanges();
+
+      fixture.debugElement
+        .queryAll(By.css('.context-menu button'))
+        .find((element) => element.nativeElement.innerHTML.includes('Left'))!
+        .nativeElement.click();
+      fixture.detectChanges();
+
+      expect(
+        fixture.debugElement.query(By.directive(ColumnSelectorComponent))
+      ).not.toBeNull();
+      const dataTable = fixture.debugElement.query(
+        By.directive(DataTableComponent)
+      );
+      expect(dataTable.componentInstance.insertColumnTo).toEqual(Side.LEFT);
+      expect(dataTable.componentInstance.contextMenuHeader.name).toEqual(
+        'other_header'
+      );
+    });
+
+    it('renders column selector when add column to the right is clicked', () => {
+      const fixture = createComponent({
+        headers: mockHeaders,
+        data: mockTableData,
+        potentialColumns: mockPotentialColumns,
+      });
+      const cell = fixture.debugElement
+        .queryAll(By.directive(HeaderCellComponent))
+        .find((cell) => cell.nativeElement.innerHTML.includes('Hparam 1'))!;
+      cell.nativeElement.dispatchEvent(new MouseEvent('contextmenu'));
+      fixture.detectChanges();
+
+      fixture.debugElement
+        .queryAll(By.css('.context-menu button'))
+        .find((element) => element.nativeElement.innerHTML.includes('Right'))!
+        .nativeElement.click();
+      fixture.detectChanges();
+
+      expect(
+        fixture.debugElement.query(By.directive(ColumnSelectorComponent))
+      ).not.toBeNull();
+      const dataTable = fixture.debugElement.query(
+        By.directive(DataTableComponent)
+      );
+      expect(dataTable.componentInstance.insertColumnTo).toEqual(Side.RIGHT);
+      expect(dataTable.componentInstance.contextMenuHeader.name).toEqual(
+        'other_header'
+      );
+    });
+
+    [
+      {
+        testDesc: 'left',
+        contextMenuButtonText: 'Left',
+        expectedSide: Side.LEFT,
+      },
+      {
+        testDesc: 'right',
+        contextMenuButtonText: 'Right',
+        expectedSide: Side.RIGHT,
+      },
+    ].forEach(({testDesc, contextMenuButtonText, expectedSide}) => {
+      it(`adds column to the ${testDesc}`, () => {
+        const fixture = createComponent({
+          headers: mockHeaders,
+          data: mockTableData,
+          potentialColumns: mockPotentialColumns,
+        });
+        const cell = fixture.debugElement
+          .queryAll(By.directive(HeaderCellComponent))
+          .find((cell) => cell.nativeElement.innerHTML.includes('Hparam 1'))!;
+        cell.nativeElement.dispatchEvent(new MouseEvent('contextmenu'));
+        fixture.detectChanges();
+        fixture.debugElement
+          .queryAll(By.css('.context-menu button'))
+          .find((element) =>
+            element.nativeElement.innerHTML.includes(contextMenuButtonText)
+          )!
+          .nativeElement.click();
+        fixture.detectChanges();
+
+        const addColumnEmitSpy = spyOn(
+          fixture.debugElement.query(By.directive(DataTableComponent))
+            .componentInstance.addColumn,
+          'emit'
+        );
+        fixture.debugElement
+          .query(By.directive(ColumnSelectorComponent))
+          .componentInstance.columnSelected.emit({
+            type: ColumnHeaderType.HPARAM,
+            name: 'lr',
+            displayName: 'Learning Rate',
+            enabled: false,
+          });
+        fixture.detectChanges();
+
+        expect(addColumnEmitSpy).toHaveBeenCalledOnceWith({
+          column: {
+            type: ColumnHeaderType.HPARAM,
+            name: 'lr',
+            displayName: 'Learning Rate',
+            enabled: false,
+          },
+          nextTo: {
+            name: 'other_header',
+            type: ColumnHeaderType.HPARAM,
+            displayName: 'Hparam 1',
+            enabled: true,
+            removable: true,
+            movable: true,
+          },
+          side: expectedSide,
+        });
+      });
+    });
+
+    it('removes column when Remove button is clicked', () => {
+      const fixture = createComponent({
+        headers: mockHeaders,
+        data: mockTableData,
+        potentialColumns: mockPotentialColumns,
+      });
+      const cell = fixture.debugElement
+        .queryAll(By.directive(ContentCellComponent))
+        .find((cell) => cell.nativeElement.innerHTML.includes('other header'))!;
+      cell.nativeElement.dispatchEvent(new MouseEvent('contextmenu'));
+      fixture.detectChanges();
+
+      spyOn(fixture.componentInstance.removeColumn, 'emit');
+      fixture.debugElement
+        .queryAll(By.css('.context-menu button'))
+        .find((btn) => btn.nativeElement.innerHTML.includes('Remove'))!
+        .nativeElement.click();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.removeColumn.emit).toHaveBeenCalled();
+      expect(fixture.debugElement.query(By.css('.context-menu'))).toBeNull();
+    });
+
+    it('opens filter modal when the filter button is clicked', () => {
+      const fixture = createComponent({
+        headers: mockHeaders,
+        data: mockTableData,
+        potentialColumns: mockPotentialColumns,
+        columnFilters: new Map([
+          [
+            'another_hparam',
+            {
+              type: DomainType.DISCRETE,
+              includeUndefined: true,
+              possibleValues: [1, 2, 3],
+              filterValues: [1, 2, 3],
+            },
+          ],
+        ]),
+      });
+
+      expect(
+        fixture.debugElement.query(By.directive(FilterDialog))
+      ).toBeFalsy();
+
+      const filterableHeader = fixture.debugElement.queryAll(
+        By.directive(HeaderCellComponent)
+      )[3];
+      filterableHeader.nativeElement.dispatchEvent(
+        new MouseEvent('contextmenu')
+      );
+      fixture.detectChanges();
+
+      const filterBtn = fixture.debugElement
+        .queryAll(By.css('.context-menu button'))
+        .find((btn) => btn.nativeElement.innerHTML.includes('Filter'))!;
+      filterBtn.nativeElement.click();
+      fixture.detectChanges();
+
+      expect(
+        fixture.debugElement.query(By.directive(DataTableComponent))
+          .componentInstance.filterColumn
+      ).toBeTruthy();
+      expect(
+        fixture.debugElement.query(By.directive(FilterDialog))
+      ).toBeTruthy();
+    });
+  });
+
+  describe('column filtering', () => {
+    let mockHeaders: ColumnHeader[];
+    beforeEach(() => {
+      mockHeaders = [
+        {
+          name: 'some_hparam',
+          type: ColumnHeaderType.HPARAM,
+          displayName: 'Display This',
+          enabled: true,
+          removable: true,
+          movable: true,
+          filterable: true,
+        },
+      ];
+    });
+
+    function openFilterDialog(fixture: ComponentFixture<TestableComponent>) {
+      const dataTableDebugEl = fixture.debugElement.query(
+        By.directive(DataTableComponent)
+      );
+      const mouseEvent = new MouseEvent('contextmenu');
+      const headerEl = fixture.debugElement.query(
+        By.css('.context-menu-container')
+      ).nativeElement;
+      spyOnProperty(mouseEvent, 'target').and.returnValue(headerEl);
+      dataTableDebugEl.componentInstance.openContextMenu(
+        mockHeaders[0],
+        mouseEvent
+      );
+      fixture.detectChanges();
+      const filterBtn = fixture.debugElement
+        .queryAll(By.css('.context-menu button'))
+        .find((btn) => btn.nativeElement.innerHTML.includes('Filter'))!;
+      filterBtn.nativeElement.click();
+      fixture.detectChanges();
+
+      return fixture.debugElement.query(By.directive(FilterDialog));
+    }
+
+    it('converts rangevalues to interval filter when an interval filter is changed', () => {
+      const filter: IntervalFilter = {
+        type: DomainType.INTERVAL,
+        includeUndefined: true,
+        minValue: 2,
+        maxValue: 10,
+        filterLowerValue: 3,
+        filterUpperValue: 8,
+      };
+      const fixture = createComponent({
+        headers: mockHeaders,
+        columnFilters: new Map([['some_hparam', filter]]),
+      });
+      const addFilterSpy = spyOn(
+        fixture.debugElement.query(By.directive(DataTableComponent))
+          .componentInstance.addFilter,
+        'emit'
+      );
+      const filterDialog = openFilterDialog(fixture);
+      filterDialog.componentInstance.intervalFilterChanged.emit({
+        lowerValue: 3,
+        upperValue: 8,
+      });
+
+      expect(addFilterSpy).toHaveBeenCalledOnceWith({
+        name: 'some_hparam',
+        value: {
+          ...filter,
+          filterLowerValue: 3,
+          filterUpperValue: 8,
+        },
+      });
+    });
+
+    it('removes value from filter values when a discrete filter is toggled off', () => {
+      const filter: DiscreteFilter = {
+        type: DomainType.DISCRETE,
+        includeUndefined: true,
+        possibleValues: [2, 4, 6, 8],
+        filterValues: [2, 4, 6, 8],
+      };
+      const fixture = createComponent({
+        headers: mockHeaders,
+        columnFilters: new Map([['some_hparam', filter]]),
+      });
+      const addFilterSpy = spyOn(
+        fixture.debugElement.query(By.directive(DataTableComponent))
+          .componentInstance.addFilter,
+        'emit'
+      );
+      const filterDialog = openFilterDialog(fixture);
+      filterDialog.componentInstance.discreteFilterChanged.emit(2);
+
+      expect(addFilterSpy).toHaveBeenCalledOnceWith({
+        name: 'some_hparam',
+        value: {
+          ...filter,
+          filterValues: [4, 6, 8],
+        },
+      });
+    });
+
+    it('adds value to filter values when a discrete filter is toggled on', () => {
+      const filter: DiscreteFilter = {
+        type: DomainType.DISCRETE,
+        includeUndefined: true,
+        possibleValues: [2, 4, 6, 8],
+        filterValues: [2, 4],
+      };
+      const fixture = createComponent({
+        headers: mockHeaders,
+        columnFilters: new Map([['some_hparam', filter]]),
+      });
+      const addFilterSpy = spyOn(
+        fixture.debugElement.query(By.directive(DataTableComponent))
+          .componentInstance.addFilter,
+        'emit'
+      );
+      const filterDialog = openFilterDialog(fixture);
+      filterDialog.componentInstance.discreteFilterChanged.emit(6);
+
+      expect(addFilterSpy).toHaveBeenCalledOnceWith({
+        name: 'some_hparam',
+        value: {
+          ...filter,
+          filterValues: [2, 4, 6],
+        },
+      });
+    });
+
+    it('toggles includeUndefined when include undefined is toggled', () => {
+      const filter: DiscreteFilter = {
+        type: DomainType.DISCRETE,
+        includeUndefined: true,
+        possibleValues: [2, 4, 6, 8],
+        filterValues: [2, 4, 6, 8],
+      };
+      const fixture = createComponent({
+        headers: mockHeaders,
+        columnFilters: new Map([['some_hparam', filter]]),
+      });
+      const addFilterSpy = spyOn(
+        fixture.debugElement.query(By.directive(DataTableComponent))
+          .componentInstance.addFilter,
+        'emit'
+      );
+      const filterDialog = openFilterDialog(fixture);
+      filterDialog.componentInstance.includeUndefinedToggled.emit();
+
+      expect(addFilterSpy).toHaveBeenCalledOnceWith({
+        name: 'some_hparam',
+        value: {
+          ...filter,
+          filterValues: [2, 4, 6, 8],
+          includeUndefined: false,
+        },
+      });
+    });
   });
 });

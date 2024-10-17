@@ -18,9 +18,7 @@ See `http_api.md` in this directory for specifications of the routes for
 this plugin.
 """
 
-
 import json
-
 
 import werkzeug
 from werkzeug import wrappers
@@ -93,7 +91,7 @@ class HParamsPlugin(base_plugin.TBPlugin):
                 ctx, self._context, experiment_id, request_proto
             ).run()
             experiment = get_experiment.Handler(
-                ctx, self._context, experiment_id
+                ctx, self._context, experiment_id, request_proto
             ).run()
             body, mime_type = download_data.Handler(
                 self._context,
@@ -113,18 +111,19 @@ class HParamsPlugin(base_plugin.TBPlugin):
         ctx = plugin_util.context(request.environ)
         experiment_id = plugin_util.experiment_id(request.environ)
         try:
-            # This backend currently ignores the request parameters, but (for a POST)
-            # we must advance the input stream to skip them -- otherwise the next HTTP
-            # request will be parsed incorrectly.
-            _ = _parse_request_argument(request, api_pb2.GetExperimentRequest)
+            request_proto = _parse_request_argument(
+                request, api_pb2.GetExperimentRequest
+            )
+            response_proto = get_experiment.Handler(
+                ctx,
+                self._context,
+                experiment_id,
+                request_proto,
+            ).run()
+            response = plugin_util.proto_to_json(response_proto)
             return http_util.Respond(
                 request,
-                json_format.MessageToJson(
-                    get_experiment.Handler(
-                        ctx, self._context, experiment_id
-                    ).run(),
-                    including_default_value_fields=True,
-                ),
+                response,
                 "application/json",
             )
         except error.HParamsError as e:
@@ -140,14 +139,16 @@ class HParamsPlugin(base_plugin.TBPlugin):
             request_proto = _parse_request_argument(
                 request, api_pb2.ListSessionGroupsRequest
             )
+            response_proto = list_session_groups.Handler(
+                ctx,
+                self._context,
+                experiment_id,
+                request_proto,
+            ).run()
+            response = plugin_util.proto_to_json(response_proto)
             return http_util.Respond(
                 request,
-                json_format.MessageToJson(
-                    list_session_groups.Handler(
-                        ctx, self._context, experiment_id, request_proto
-                    ).run(),
-                    including_default_value_fields=True,
-                ),
+                response,
                 "application/json",
             )
         except error.HParamsError as e:
@@ -168,11 +169,9 @@ class HParamsPlugin(base_plugin.TBPlugin):
                 raise werkzeug.exceptions.NotFound("Scalars plugin not loaded")
             return http_util.Respond(
                 request,
-                json.dumps(
-                    list_metric_evals.Handler(
-                        ctx, request_proto, scalars_plugin, experiment_id
-                    ).run()
-                ),
+                list_metric_evals.Handler(
+                    ctx, request_proto, scalars_plugin, experiment_id
+                ).run(),
                 "application/json",
             )
         except error.HParamsError as e:

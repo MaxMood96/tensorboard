@@ -20,6 +20,7 @@ import {splitByURL} from '../../util/string';
 import {AlertInfo} from '../types';
 
 @Component({
+  standalone: false,
   selector: 'alert-display-snackbar',
   templateUrl: './alert_display_snackbar_container.ng.html',
   styleUrls: ['./alert_display_snackbar_container.css'],
@@ -40,9 +41,7 @@ export class AlertDisplaySnackbarContainer {
   async onActionButtonClicked() {
     this.snackBarRef.dismiss();
 
-    const followupAction = await this.alert.followupAction!.getFollowupAction(
-      this.store
-    );
+    const followupAction = await this.alert.followupAction!.getFollowupAction();
     this.store.dispatch(followupAction);
   }
 

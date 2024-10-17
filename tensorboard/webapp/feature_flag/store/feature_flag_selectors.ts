@@ -126,13 +126,6 @@ export const getIsMetricsImageSupportEnabled = createSelector(
   }
 );
 
-export const getIsLinkedTimeEnabled = createSelector(
-  getFeatureFlags,
-  (flags: FeatureFlags): boolean => {
-    return flags.enabledLinkedTime;
-  }
-);
-
 export const getForceSvgFeatureFlag = createSelector(
   getFeatureFlags,
   (flags: FeatureFlags): boolean => {
@@ -140,31 +133,10 @@ export const getForceSvgFeatureFlag = createSelector(
   }
 );
 
-export const getIsDataTableEnabled = createSelector(
-  getFeatureFlags,
-  (flags: FeatureFlags): boolean => {
-    return flags.enabledScalarDataTable;
-  }
-);
-
 export const getShowFlagsEnabled = createSelector(
   getFeatureFlags,
   (flags: FeatureFlags): boolean => {
-    return flags.enableShowFlags;
-  }
-);
-
-export const getAllowRangeSelection = createSelector(
-  getFeatureFlags,
-  (flags: FeatureFlags): boolean => {
-    return flags.allowRangeSelection;
-  }
-);
-
-export const getIsLinkedTimeProspectiveFobEnabled = createSelector(
-  getFeatureFlags,
-  (flags: FeatureFlags): boolean => {
-    return flags.enabledProspectiveFob;
+    return flags.showFlags !== undefined;
   }
 );
 
@@ -172,5 +144,26 @@ export const getIsScalarColumnCustomizationEnabled = createSelector(
   getFeatureFlags,
   (flags: FeatureFlags): boolean => {
     return flags.enableScalarColumnCustomization;
+  }
+);
+
+export const getIsScalarColumnContextMenusEnabled = createSelector(
+  getFeatureFlags,
+  (flags: FeatureFlags): boolean => {
+    return flags.enableScalarColumnContextMenus;
+  }
+);
+
+export const getEnableGlobalPins = createSelector(
+  getFeatureFlags,
+  (flags: FeatureFlags): boolean => {
+    return flags.enableGlobalPins;
+  }
+);
+
+export const getEnableColorByExperiment = createSelector(
+  getFeatureFlags,
+  (flags: FeatureFlags): boolean => {
+    return flags.enableColorByExperiment;
   }
 );

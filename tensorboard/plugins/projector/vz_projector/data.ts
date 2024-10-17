@@ -87,7 +87,7 @@ export interface DataPoint {
   };
 }
 const IS_FIREFOX = navigator.userAgent.toLowerCase().indexOf('firefox') >= 0;
-/** Controls whether nearest neighbors computation is done on the GPU or CPU. */
+/** Maximum sample size for each projection type. */
 export const TSNE_SAMPLE_SIZE = 10000;
 export const UMAP_SAMPLE_SIZE = 5000;
 export const PCA_SAMPLE_SIZE = 50000;
@@ -97,6 +97,8 @@ export const PCA_SAMPLE_DIM = 200;
 const NUM_PCA_COMPONENTS = 10;
 /** Id of message box used for umap optimization progress bar. */
 const UMAP_MSG_ID = 'umap-optimization';
+/** Minimum KNN neighbors threshold */
+const MIN_NUM_KNN_NEIGHBORS = 300;
 /**
  * Reserved metadata attributes used for sequence information
  * NOTE: Use "__seq_next__" as "__next__" is deprecated.
@@ -334,6 +336,10 @@ export class DataSet {
     this.tSNEIteration = 0;
     let sampledIndices = this.shuffledDataIndices.slice(0, TSNE_SAMPLE_SIZE);
     let step = () => {
+      if (!this.tsne.getSolution()) {
+        this.initTsneSolutionFromCurrentProjection();
+        return;
+      }
       if (this.tSNEShouldStop) {
         this.projections['tsne'] = false;
         stepCallback(null!);
@@ -344,12 +350,11 @@ export class DataSet {
       if (!this.tSNEShouldPause) {
         this.tsne.step();
         let result = this.tsne.getSolution();
+        const d = this.tsne.getDim();
         sampledIndices.forEach((index, i) => {
           let dataPoint = this.points[index];
-          dataPoint.projections['tsne-0'] = result[i * tsneDim + 0];
-          dataPoint.projections['tsne-1'] = result[i * tsneDim + 1];
-          if (tsneDim === 3) {
-            dataPoint.projections['tsne-2'] = result[i * tsneDim + 2];
+          for (let j = 0; j < d; j++) {
+            dataPoint.projections[`tsne-${j}`] = result[i * d + j];
           }
         });
         this.projections['tsne'] = true;
@@ -372,10 +377,11 @@ export class DataSet {
   async projectUmap(
     nComponents: number,
     nNeighbors: number,
+    minDist: number,
     stepCallback: (iter: number) => void
   ) {
     this.hasUmapRun = true;
-    this.umap = new UMAP({nComponents, nNeighbors});
+    this.umap = new UMAP({nComponents, nNeighbors, minDist});
     let currentEpoch = 0;
     const epochStepSize = 10;
     const sampledIndices = this.shuffledDataIndices.slice(0, UMAP_SAMPLE_SIZE);
@@ -456,35 +462,53 @@ export class DataSet {
       this.nearest && this.nearest.length ? this.nearest[0].length : 0;
     if (
       this.nearest != null &&
-      this.nearest.length >= data.length &&
+      this.nearest.length === data.length &&
       previouslyComputedNNeighbors >= nNeighbors
     ) {
       return Promise.resolve(
         this.nearest
-          // `this.points` is only set and constructor and `data` is subset of
-          // it. If `nearest` is calculated with N = 1000 sampled points before
-          // and we are asked to calculate KNN ofN = 50, pretend like we
-          // recalculated the KNN for N = 50 by taking first 50 of result from
-          // N = 1000.
-          .slice(0, data.length)
           // NearestEntry has list of K-nearest vector indices at given index.
           // Hence, if we already precomputed K = 100 before and later seek
-          // K-10, we just have ot take the first ten.
+          // K = 10, we just have ot take the first ten.
           .map((neighbors) => neighbors.slice(0, nNeighbors))
       );
     } else {
       const knnGpuEnabled = (await util.hasWebGLSupport()) && !IS_FIREFOX;
+      const numKnnNeighborsToCompute = Math.max(
+        nNeighbors,
+        MIN_NUM_KNN_NEIGHBORS
+      );
       const result = await (knnGpuEnabled
-        ? knn.findKNNGPUCosDistNorm(data, nNeighbors, (d) => d.vector)
+        ? knn.findKNNGPUCosDistNorm(
+            data,
+            numKnnNeighborsToCompute,
+            (d) => d.vector
+          )
         : knn.findKNN(
             data,
-            nNeighbors,
+            numKnnNeighborsToCompute,
             (d) => d.vector,
             (a, b) => vector.cosDistNorm(a, b)
           ));
       this.nearest = result;
-      return Promise.resolve(result);
+      return Promise.resolve(
+        result.map((neighbors) => neighbors.slice(0, nNeighbors))
+      );
     }
+  }
+  /* initialize the new tsne solution from current projection data */
+  initTsneSolutionFromCurrentProjection() {
+    const sampledIndices = this.shuffledDataIndices.slice(0, TSNE_SAMPLE_SIZE);
+    const rng = this.tsne.getRng();
+    const d = this.tsne.getDim();
+    const solution = new Float64Array(sampledIndices.length * d);
+    sampledIndices.forEach((index, i) => {
+      const dataPoint = this.points[index];
+      for (let j = 0; j < d; j++) {
+        solution[i * d + j] = dataPoint.projections[`tsne-${j}`] ?? rng();
+      }
+    });
+    this.tsne.setSolution(solution);
   }
   /* Perturb TSNE and update dataset point coordinates. */
   perturbTsne() {
@@ -501,6 +525,11 @@ export class DataSet {
           dataPoint.projections['tsne-2'] = result[i * tsneDim + 2];
         }
       });
+    }
+  }
+  setTsneLearningRate(learningRate: number) {
+    if (this.tsne) {
+      this.tsne.setEpsilon(learningRate);
     }
   }
   setSupervision(superviseColumn: string, superviseInput?: string) {
@@ -660,6 +689,7 @@ export class State {
   /** UMAP parameters */
   umapIs3d: boolean = true;
   umapNeighbors: number = 15;
+  umapMinDist: number = 0.1;
   /** PCA projection component dimensions */
   pcaComponentDimensions: number[] = [];
   /** Custom projection parameters */
@@ -680,6 +710,8 @@ export class State {
   filteredPoints: number[];
   /** The indices of selected points. */
   selectedPoints: number[] = [];
+  /** The shuffled indices of points. */
+  shuffledDataIndices: number[] = [];
   /** Camera state (2d/3d, position, target, zoom, etc). */
   cameraDef: CameraDef;
   /** Color by option. */

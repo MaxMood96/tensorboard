@@ -54,6 +54,7 @@ interface BaseHparamSpec {
   displayName: string;
   name: string;
   type: BackendHparamsValueType;
+  differs: boolean;
 }
 
 export interface IntervalDomainHparamSpec extends BaseHparamSpec {
@@ -85,6 +86,12 @@ export function isDiscreteDomainHparamSpec(
   return spec.hasOwnProperty('domainDiscrete');
 }
 
+export interface BackendHparamsExperimentRequest {
+  experimentName: string;
+  hparamsLimit: number;
+  includeMetrics: boolean;
+}
+
 export interface BackendHparamsExperimentResponse {
   description: string;
   hparamInfos: HparamSpec[];
@@ -96,10 +103,12 @@ export interface BackendHparamsExperimentResponse {
 
 interface HparamsColFilterParams {
   hparam: string;
+  includeInResult: boolean;
 }
 
 interface MetricsColFilterParams {
   metric: MetricName;
+  includeInResult: boolean;
 }
 
 export interface BackendListSessionGroupRequest {
@@ -108,6 +117,7 @@ export interface BackendListSessionGroupRequest {
   colParams: Array<HparamsColFilterParams | MetricsColFilterParams>;
   startIndex: number;
   sliceSize: number;
+  includeMetrics?: boolean;
 }
 
 export interface Session {

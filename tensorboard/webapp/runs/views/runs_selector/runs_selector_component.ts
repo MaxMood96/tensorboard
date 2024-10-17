@@ -16,17 +16,23 @@ import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {RunsTableColumn} from '../runs_table/types';
 
 @Component({
+  standalone: false,
   selector: 'runs-selector-component',
   template: `
     <runs-table
-      [useFlexibleLayout]="true"
       [columns]="columns"
       [experimentIds]="experimentIds"
-      [showHparamsAndMetrics]="showHparamsAndMetrics"
     ></runs-table>
   `,
   styles: [
     `
+      :host {
+        display: block;
+        height: 100%;
+        width: 100%;
+        overflow: auto;
+      }
+
       runs-table {
         height: 100%;
       }
@@ -36,6 +42,5 @@ import {RunsTableColumn} from '../runs_table/types';
 })
 export class RunsSelectorComponent {
   @Input() experimentIds!: string[];
-  @Input() showHparamsAndMetrics?: boolean;
   @Input() columns!: RunsTableColumn[];
 }

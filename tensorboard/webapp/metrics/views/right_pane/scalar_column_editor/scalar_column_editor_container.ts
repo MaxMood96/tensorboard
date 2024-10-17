@@ -14,44 +14,74 @@ limitations under the License.
 ==============================================================================*/
 import {ChangeDetectionStrategy, Component} from '@angular/core';
 import {Store} from '@ngrx/store';
-import {Observable} from 'rxjs';
+import {map} from 'rxjs/operators';
 import {State} from '../../../../app_state';
-import {dataTableColumnEdited, dataTableColumnToggled} from '../../../actions';
+import {
+  ColumnHeader,
+  DataTableMode,
+} from '../../../../widgets/data_table/types';
+import {
+  dataTableColumnOrderChanged,
+  dataTableColumnToggled,
+  metricsSlideoutMenuClosed,
+  tableEditorTabChanged,
+} from '../../../actions';
 import {
   getRangeSelectionHeaders,
   getSingleSelectionHeaders,
+  getTableEditorSelectedTab,
 } from '../../../store/metrics_selectors';
 import {HeaderEditInfo, HeaderToggleInfo} from '../../../types';
-import {
-  ColumnHeader,
-  ColumnHeaderType,
-  DataTableMode,
-} from '../../card_renderer/scalar_card_types';
+
+function headersWithoutRuns(headers: ColumnHeader[]) {
+  return headers.filter((header) => header.type !== 'RUN');
+}
 
 @Component({
+  standalone: false,
   selector: 'metrics-scalar-column-editor',
   template: `
     <metrics-scalar-column-editor-component
       [singleHeaders]="singleHeaders$ | async"
       [rangeHeaders]="rangeHeaders$ | async"
+      [selectedTab]="selectedTab$ | async"
       (onScalarTableColumnToggled)="onScalarTableColumnToggled($event)"
       (onScalarTableColumnEdit)="onScalarTableColumnEdit($event)"
+      (onScalarTableColumnEditorClosed)="onScalarTableColumnEditorClosed()"
+      (onTabChange)="onTabChange($event)"
     >
     </metrics-scalar-column-editor-component>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ScalarColumnEditorContainer {
-  constructor(private readonly store: Store<State>) {}
+  constructor(private readonly store: Store<State>) {
+    this.singleHeaders$ = this.store
+      .select(getSingleSelectionHeaders)
+      .pipe(map(headersWithoutRuns));
+    this.rangeHeaders$ = this.store
+      .select(getRangeSelectionHeaders)
+      .pipe(map(headersWithoutRuns));
+    this.selectedTab$ = this.store.select(getTableEditorSelectedTab);
+  }
 
-  readonly singleHeaders$ = this.store.select(getSingleSelectionHeaders);
-  readonly rangeHeaders$ = this.store.select(getRangeSelectionHeaders);
+  readonly singleHeaders$;
+  readonly rangeHeaders$;
+  readonly selectedTab$;
 
   onScalarTableColumnToggled(toggleInfo: HeaderToggleInfo) {
     this.store.dispatch(dataTableColumnToggled(toggleInfo));
   }
 
   onScalarTableColumnEdit(editInfo: HeaderEditInfo) {
-    this.store.dispatch(dataTableColumnEdited(editInfo));
+    this.store.dispatch(dataTableColumnOrderChanged(editInfo));
+  }
+
+  onScalarTableColumnEditorClosed() {
+    this.store.dispatch(metricsSlideoutMenuClosed());
+  }
+
+  onTabChange(tab: DataTableMode) {
+    this.store.dispatch(tableEditorTabChanged({tab}));
   }
 }

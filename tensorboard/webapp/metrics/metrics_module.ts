@@ -19,10 +19,13 @@ import {Action, createSelector, StoreModule} from '@ngrx/store';
 import {AlertActionModule} from '../alert/alert_action_module';
 import {AppRoutingModule} from '../app_routing/app_routing_module';
 import {CoreModule} from '../core/core_module';
-import {PersistentSettingsConfigModule} from '../persistent_settings/persistent_settings_config_module';
 import {PluginRegistryModule} from '../plugins/plugin_registry_module';
 import * as actions from './actions';
-import {MetricsDataSourceModule, METRICS_PLUGIN_ID} from './data_source';
+import {
+  MetricsDataSourceModule,
+  METRICS_PLUGIN_ID,
+  SavedPinsDataSourceModule,
+} from './data_source';
 import {MetricsEffects} from './effects';
 import {
   getMetricsCardMinWidth,
@@ -32,6 +35,9 @@ import {
   getMetricsScalarSmoothing,
   getMetricsStepSelectorEnabled,
   getMetricsTooltipSort,
+  getMetricsSavingPinsEnabled,
+  getRangeSelectionHeaders,
+  getSingleSelectionHeaders,
   isMetricsSettingsPaneOpen,
   METRICS_FEATURE_KEY,
   METRICS_SETTINGS_DEFAULT,
@@ -44,6 +50,11 @@ import {
 } from './store/metrics_initial_state_provider';
 import {MetricsDashboardContainer} from './views/metrics_container';
 import {MetricsViewsModule} from './views/metrics_views_module';
+import {FeatureFlagModule} from '../feature_flag/feature_flag_module';
+import {
+  PersistentSettingsConfigModule,
+  PersistentSettingsModule,
+} from '../persistent_settings';
 
 const CREATE_PIN_MAX_EXCEEDED_TEXT =
   `Max pin limit exceeded. Remove existing` +
@@ -115,6 +126,24 @@ export function getMetricsTimeSeriesLinkedTimeEnabled() {
   });
 }
 
+export function getMetricsTimeSeriesSavingPinsEnabled() {
+  return createSelector(getMetricsSavingPinsEnabled, (isEnabled) => {
+    return {savingPinsEnabled: isEnabled};
+  });
+}
+
+export function getSingleSelectionHeadersFactory() {
+  return createSelector(getSingleSelectionHeaders, (singleSelectionHeaders) => {
+    return {singleSelectionHeaders};
+  });
+}
+
+export function getRangeSelectionHeadersFactory() {
+  return createSelector(getRangeSelectionHeaders, (rangeSelectionHeaders) => {
+    return {rangeSelectionHeaders};
+  });
+}
+
 @NgModule({
   imports: [
     CommonModule,
@@ -131,6 +160,9 @@ export function getMetricsTimeSeriesLinkedTimeEnabled() {
       reducers,
       METRICS_STORE_CONFIG_TOKEN
     ),
+    SavedPinsDataSourceModule,
+    FeatureFlagModule,
+    PersistentSettingsModule,
     EffectsModule.forFeature([MetricsEffects]),
     AlertActionModule.registerAlertActions(alertActionProvider),
     PersistentSettingsConfigModule.defineGlobalSetting(
@@ -157,6 +189,15 @@ export function getMetricsTimeSeriesLinkedTimeEnabled() {
     PersistentSettingsConfigModule.defineGlobalSetting(
       getMetricsTimeSeriesLinkedTimeEnabled
     ),
+    PersistentSettingsConfigModule.defineGlobalSetting(
+      getSingleSelectionHeadersFactory
+    ),
+    PersistentSettingsConfigModule.defineGlobalSetting(
+      getRangeSelectionHeadersFactory
+    ),
+    PersistentSettingsConfigModule.defineGlobalSetting(
+      getMetricsTimeSeriesSavingPinsEnabled
+    ),
   ],
   providers: [
     {
@@ -169,6 +210,5 @@ export function getMetricsTimeSeriesLinkedTimeEnabled() {
       useValue: METRICS_SETTINGS_DEFAULT,
     },
   ],
-  entryComponents: [MetricsDashboardContainer],
 })
 export class MetricsModule {}

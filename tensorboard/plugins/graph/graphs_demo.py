@@ -90,7 +90,7 @@ def keras():
     model = tf.keras.models.Sequential(layers)
     model.compile(
         loss=tf.keras.losses.mean_squared_error,
-        optimizer=tf.keras.optimizers.SGD(lr=0.2),
+        optimizer=tf.keras.optimizers.SGD(learning_rate=0.2),
     )
     model.fit(
         x_train,
@@ -115,24 +115,22 @@ def profile():
 
     @tf.function
     def f(i):
-        return tf.constant(i) + tf.constant(i)
+        return i + i
 
     @tf.function
     def g(i):
-        return tf.constant(i) * tf.constant(i)
+        return i * i
 
     with tf.summary.create_file_writer(logdir).as_default():
         for step in range(3):
             # Suppress the profiler deprecation warnings from tf.summary.trace_*.
             with _silence_deprecation_warnings():
-                tf.summary.trace_on(profiler=True)
-                print(f(step).numpy())
-                tf.summary.trace_export(
-                    "prof_f", step=step, profiler_outdir=logdir
-                )
+                tf.summary.trace_on(profiler=True, profiler_outdir=logdir)
+                print(f(tf.constant(step)).numpy())
+                tf.summary.trace_export("prof_f", step=step)
 
                 tf.summary.trace_on(profiler=False)
-                print(g(step).numpy())
+                print(g(tf.constant(step)).numpy())
                 tf.summary.trace_export("prof_g", step=step)
 
 

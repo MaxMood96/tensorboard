@@ -23,6 +23,7 @@ import {State as FeatureFlagState} from '../feature_flag/store/feature_flag_type
 import {DarkModeOverride} from './dark_mode_toggle_component';
 
 @Component({
+  standalone: false,
   selector: 'app-header-dark-mode-toggle',
   template: `
     <app-header-dark-mode-toggle-component
@@ -33,9 +34,10 @@ import {DarkModeOverride} from './dark_mode_toggle_component';
   `,
 })
 export class DarkModeToggleContainer {
-  readonly darkModeOverride$: Observable<DarkModeOverride> = this.store
-    .select(getEnableDarkModeOverride)
-    .pipe(
+  readonly darkModeOverride$: Observable<DarkModeOverride>;
+
+  constructor(private readonly store: Store<CoreState & FeatureFlagState>) {
+    this.darkModeOverride$ = this.store.select(getEnableDarkModeOverride).pipe(
       map((override: boolean | null): DarkModeOverride => {
         if (override === null) return DarkModeOverride.DEFAULT;
         return override
@@ -43,8 +45,7 @@ export class DarkModeToggleContainer {
           : DarkModeOverride.DARK_MODE_OFF;
       })
     );
-
-  constructor(private readonly store: Store<CoreState & FeatureFlagState>) {}
+  }
 
   changeDarkMode(newOverride: DarkModeOverride) {
     let enableDarkMode: boolean | null = null;

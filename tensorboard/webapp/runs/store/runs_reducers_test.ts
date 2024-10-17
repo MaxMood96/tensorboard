@@ -21,12 +21,11 @@ import {
 import {RouteKind} from '../../app_routing/types';
 import {deepFreeze} from '../../testing/lang';
 import {DataLoadState} from '../../types/data';
-import {SortDirection} from '../../types/ui';
+import {ColumnHeaderType, SortingOrder} from '../../widgets/data_table/types';
 import * as actions from '../actions';
-import {buildHparamsAndMetadata} from '../data_source/testing';
-import {GroupByKey, SortType, URLDeserializedState} from '../types';
+import {GroupByKey, URLDeserializedState} from '../types';
 import * as runsReducers from './runs_reducers';
-import {MAX_NUM_RUNS_TO_ENABLE_BY_DEFAULT, Run} from './runs_types';
+import {MAX_NUM_RUNS_TO_ENABLE_BY_DEFAULT, Run, RunsState} from './runs_types';
 import {buildRun, buildRunsState} from './testing';
 
 describe('runs_reducers', () => {
@@ -151,17 +150,12 @@ describe('runs_reducers', () => {
       const action = actions.fetchRunsSucceeded({
         experimentIds: [],
         runsForAllExperiments: [],
-        newRunsAndMetadata: {
+        newRuns: {
           eid1: {
             runs: [
               {id: 'rid1', name: 'Run 1', startTime: 1},
               {id: 'rid2', name: 'Run 2', startTime: 1},
             ],
-            metadata: buildHparamsAndMetadata({
-              runToHparamsAndMetrics: {
-                rid1: {hparams: [{name: 'foo', value: 'bar'}], metrics: []},
-              },
-            }),
           },
         },
       });
@@ -179,8 +173,8 @@ describe('runs_reducers', () => {
           id: 'rid1',
           name: 'Run 1',
           startTime: 1,
-          hparams: [{name: 'foo', value: 'bar'}],
-          metrics: [],
+          hparams: null,
+          metrics: null,
         },
         rid2: {
           id: 'rid2',
@@ -221,7 +215,7 @@ describe('runs_reducers', () => {
           buildRun({id: 'gamma'}),
           buildRun({id: 'lambda'}),
         ],
-        newRunsAndMetadata: {
+        newRuns: {
           eid1: {
             runs: [
               buildRun({id: 'baz'}),
@@ -232,7 +226,6 @@ describe('runs_reducers', () => {
               buildRun({id: 'gamma'}),
               buildRun({id: 'lambda'}),
             ],
-            metadata: buildHparamsAndMetadata({}),
           },
         },
       });
@@ -294,14 +287,13 @@ describe('runs_reducers', () => {
             buildRun({id: 'gamma'}),
             buildRun({id: 'lambda'}),
           ],
-          newRunsAndMetadata: {
+          newRuns: {
             eid1: {
               runs: [
                 buildRun({id: 'baz'}),
                 buildRun({id: 'foo'}),
                 buildRun({id: 'qaz'}),
               ],
-              metadata: buildHparamsAndMetadata({}),
             },
             eid2: {
               runs: [
@@ -310,7 +302,6 @@ describe('runs_reducers', () => {
                 buildRun({id: 'gamma'}),
                 buildRun({id: 'lambda'}),
               ],
-              metadata: buildHparamsAndMetadata({}),
             },
           },
         });
@@ -331,7 +322,7 @@ describe('runs_reducers', () => {
         );
       });
 
-      it('assigns non-matched colors to regex non-matched runs', () => {
+      it('assigns non-matched colors to regex by run, non-matched runs', () => {
         const state = buildRunsState({
           initialGroupBy: {key: GroupByKey.REGEX, regexString: 'foo(\\d+)'},
           defaultRunColorIdForGroupBy: new Map([
@@ -349,7 +340,7 @@ describe('runs_reducers', () => {
             buildRun({id: 'eid2/alpha', name: 'alpha'}),
             buildRun({id: 'eid2/delta', name: 'delta'}),
           ],
-          newRunsAndMetadata: {},
+          newRuns: {},
         });
 
         const nextState = runsReducers.reducers(state, action);
@@ -364,6 +355,63 @@ describe('runs_reducers', () => {
             ['eid2/gamma', 1],
             ['eid2/alpha', -1],
             ['eid2/delta', -1],
+          ])
+        );
+      });
+
+      it('assigns non-matched colors to regex by experiment, non-matched runs', () => {
+        const state = buildRunsState({
+          initialGroupBy: {
+            key: GroupByKey.REGEX_BY_EXP,
+            regexString: 'foo(\\d+)',
+          },
+          defaultRunColorIdForGroupBy: new Map([
+            ['foo', 0],
+            ['bar', 0],
+          ]),
+          runIdToExpId: {
+            'eid1/alpha': 'eid1',
+            'eid1/beta': 'eid1',
+            'eid2/beta': 'eid2',
+            'eid2/gamma': 'eid2',
+            'eid2/alpha': 'eid2',
+            'eid3/delta': 'eid3',
+            'eid4/theta': 'eid4',
+          },
+        });
+        const action = actions.fetchRunsSucceeded({
+          experimentIds: ['eid1', 'eid2', 'eid3', 'eid4'],
+          runsForAllExperiments: [
+            buildRun({id: 'eid1/alpha', name: 'foo1bar1'}),
+            buildRun({id: 'eid1/beta', name: 'foo2bar1'}),
+            buildRun({id: 'eid2/beta', name: 'foo2bar2'}),
+            buildRun({id: 'eid2/gamma', name: 'foo2bar2bar'}),
+            buildRun({id: 'eid2/alpha', name: 'alpha'}),
+            buildRun({id: 'eid3/delta', name: 'delta'}),
+            buildRun({id: 'eid4/theta', name: 'theta'}),
+          ],
+          newRuns: {},
+          expNameByExpId: {
+            eid1: 'foo1',
+            eid2: 'foo2bar1',
+            eid3: 'foo1bar2',
+            eid4: 'theta',
+          },
+        });
+
+        const nextState = runsReducers.reducers(state, action);
+
+        expect(nextState.data.defaultRunColorIdForGroupBy).toEqual(
+          new Map([
+            ['foo', 0],
+            ['bar', 0],
+            ['eid1/alpha', 0],
+            ['eid1/beta', 0],
+            ['eid2/beta', 1],
+            ['eid2/gamma', 1],
+            ['eid2/alpha', 1],
+            ['eid3/delta', 0],
+            ['eid4/theta', -1],
           ])
         );
       });
@@ -384,10 +432,9 @@ describe('runs_reducers', () => {
         actions.fetchRunsSucceeded({
           experimentIds: ['b'],
           runsForAllExperiments: [...existingRuns, ...fewNewRuns],
-          newRunsAndMetadata: {
+          newRuns: {
             b: {
               runs: fewNewRuns,
-              metadata: buildHparamsAndMetadata({}),
             },
           },
         })
@@ -417,10 +464,9 @@ describe('runs_reducers', () => {
         actions.fetchRunsSucceeded({
           experimentIds: ['b'],
           runsForAllExperiments: [...existingRuns, ...manyNewRuns],
-          newRunsAndMetadata: {
+          newRuns: {
             b: {
               runs: manyNewRuns,
-              metadata: buildHparamsAndMetadata({}),
             },
           },
         })
@@ -683,30 +729,6 @@ describe('runs_reducers', () => {
     });
   });
 
-  describe('runSelectorPaginationOptionChanged', () => {
-    it('updates the pagination option', () => {
-      const state = buildRunsState(undefined, {
-        paginationOption: {
-          pageSize: 20,
-          pageIndex: 2,
-        },
-      });
-
-      const nextState = runsReducers.reducers(
-        state,
-        actions.runSelectorPaginationOptionChanged({
-          pageSize: 10,
-          pageIndex: 0,
-        })
-      );
-
-      expect(nextState.ui.paginationOption).toEqual({
-        pageSize: 10,
-        pageIndex: 0,
-      });
-    });
-  });
-
   describe('runSelectorRegexFilterChanged', () => {
     it('updates the regex filter', () => {
       const state = buildRunsState(
@@ -722,49 +744,6 @@ describe('runs_reducers', () => {
       );
 
       expect(nextState.data.regexFilter).toBe('foo rocks');
-    });
-
-    it('resets the pagination index', () => {
-      const state = buildRunsState(
-        {regexFilter: 'foo'},
-        {
-          paginationOption: {
-            pageSize: 10,
-            pageIndex: 100,
-          },
-        }
-      );
-
-      const nextState = runsReducers.reducers(
-        state,
-        actions.runSelectorRegexFilterChanged({regexString: 'bar'})
-      );
-
-      expect(nextState.ui.paginationOption.pageIndex).toBe(0);
-    });
-  });
-
-  describe('runSelectorSortChanged', () => {
-    it('updates the sort changed', () => {
-      const state = buildRunsState(undefined, {
-        sort: {
-          key: null,
-          direction: SortDirection.UNSET,
-        },
-      });
-
-      const nextState = runsReducers.reducers(
-        state,
-        actions.runSelectorSortChanged({
-          key: {type: SortType.EXPERIMENT_NAME},
-          direction: SortDirection.ASC,
-        })
-      );
-
-      expect(nextState.ui.sort).toEqual({
-        key: {type: SortType.EXPERIMENT_NAME},
-        direction: SortDirection.ASC,
-      });
     });
   });
 
@@ -994,6 +973,84 @@ describe('runs_reducers', () => {
       expect(nextState.data.colorGroupRegexString).toBe('foo(\\d+)');
     });
 
+    it('reassigns color to REGEX_BY_EXP from RUN', () => {
+      const state = buildRunsState({
+        initialGroupBy: {key: GroupByKey.RUN},
+        runIds: {
+          eid1: ['run1', 'run2'],
+          eid2: ['run3', 'run4', 'run5', 'run6'],
+          eid3: ['run7'],
+          eid4: ['run8'],
+        },
+        runIdToExpId: {
+          run1: 'eid1',
+          run2: 'eid1',
+          run3: 'eid2',
+          run4: 'eid2',
+          run5: 'eid2',
+          run6: 'eid2',
+          run7: 'eid3',
+          run8: 'eid4',
+        },
+        runMetadata: {
+          run1: buildRun({id: 'run1', name: 'foo1bar1'}),
+          run2: buildRun({id: 'run2', name: 'foo2bar1'}),
+          run3: buildRun({id: 'run3', name: 'foo2bar2'}),
+          run4: buildRun({id: 'run4', name: 'foo2bar2bar'}),
+          run5: buildRun({id: 'run5', name: 'beta'}),
+          run6: buildRun({id: 'run6', name: 'gamma'}),
+          run7: buildRun({id: 'run7', name: 'foo1bar1'}),
+          run8: buildRun({id: 'run8', name: 'theta'}),
+        },
+        defaultRunColorIdForGroupBy: new Map([
+          ['run1', 0],
+          ['run2', 1],
+          ['run3', 2],
+          ['run4', 3],
+          ['run5', 4],
+          ['run6', 5],
+          ['run7', 6],
+          ['run8', 7],
+        ]),
+      });
+
+      const nextState = runsReducers.reducers(
+        state,
+        actions.runGroupByChanged({
+          experimentIds: ['eid1', 'eid2', 'eid3', 'eid4'],
+          groupBy: {key: GroupByKey.REGEX_BY_EXP, regexString: 'foo(\\d+)'},
+          expNameByExpId: {
+            eid1: 'foo1',
+            eid2: 'foo2',
+            eid3: 'foo1bar1',
+            eid4: 'theta',
+          },
+        })
+      );
+
+      expect(nextState.data.userSetGroupByKey).toEqual(GroupByKey.REGEX_BY_EXP);
+      expect(nextState.data.groupKeyToColorId).toEqual(
+        new Map([
+          ['["1"]', 0],
+          ['["2"]', 1],
+        ])
+      );
+      expect(nextState.data.defaultRunColorIdForGroupBy).toEqual(
+        new Map([
+          ['run1', 0],
+          ['run2', 0],
+          ['run3', 1],
+          ['run4', 1],
+          ['run5', 1],
+          ['run6', 1],
+          ['run7', 0],
+          ['run8', -1],
+        ])
+      );
+      expect(nextState.data.runColorOverrideForGroupBy).toEqual(new Map());
+      expect(nextState.data.colorGroupRegexString).toBe('foo(\\d+)');
+    });
+
     it('preserves regexString when reassigning color to RUN from REGEX', () => {
       const state = buildRunsState({
         initialGroupBy: {key: GroupByKey.RUN},
@@ -1050,6 +1107,73 @@ describe('runs_reducers', () => {
         actions.runGroupByChanged({
           experimentIds: ['eid1', 'eid2'],
           groupBy: {key: GroupByKey.REGEX, regexString: 'updated regexString'},
+        })
+      );
+      expect(state4.data.colorGroupRegexString).toBe('updated regexString');
+    });
+
+    it('preserves experiment regexString when reassigning color to RUN from REGEX_BY_EXP', () => {
+      const state = buildRunsState({
+        initialGroupBy: {key: GroupByKey.RUN},
+        runIds: {
+          eid1: ['run1', 'run2'],
+          eid2: ['run3', 'run4', 'run5', 'run6'],
+        },
+        runIdToExpId: {
+          run1: 'eid1',
+          run2: 'eid1',
+          run3: 'eid2',
+          run4: 'eid2',
+          run5: 'eid2',
+          run6: 'eid2',
+        },
+        runMetadata: {
+          run1: buildRun({id: 'run1', name: 'foo1bar1'}),
+          run2: buildRun({id: 'run2', name: 'foo2bar1'}),
+          run3: buildRun({id: 'run3', name: 'foo2bar2'}),
+          run4: buildRun({id: 'run4', name: 'foo2bar2bar'}),
+          run5: buildRun({id: 'run5', name: 'beta'}),
+          run6: buildRun({id: 'run6', name: 'gamma'}),
+        },
+        defaultRunColorIdForGroupBy: new Map([
+          ['run1', 0],
+          ['run2', 1],
+          ['run3', 2],
+          ['run4', 3],
+          ['run5', 4],
+          ['run6', 5],
+        ]),
+      });
+
+      const state2 = runsReducers.reducers(
+        state,
+        actions.runGroupByChanged({
+          experimentIds: ['eid1', 'eid2'],
+          groupBy: {
+            key: GroupByKey.REGEX_BY_EXP,
+            regexString: 'initial regex string',
+          },
+        })
+      );
+      const state3 = runsReducers.reducers(
+        state2,
+        actions.runGroupByChanged({
+          experimentIds: ['eid1', 'eid2'],
+          groupBy: {key: GroupByKey.RUN},
+        })
+      );
+
+      expect(state3.data.colorGroupRegexString).toBe('initial regex string');
+
+      // Updates colorGroupRegexString with new regexString when type GroupBy is RegexGroupBy
+      const state4 = runsReducers.reducers(
+        state3,
+        actions.runGroupByChanged({
+          experimentIds: ['eid1', 'eid2'],
+          groupBy: {
+            key: GroupByKey.REGEX_BY_EXP,
+            regexString: 'updated regexString',
+          },
         })
       );
       expect(state4.data.colorGroupRegexString).toBe('updated regexString');
@@ -1216,6 +1340,28 @@ describe('runs_reducers', () => {
       expect(nextState.data.colorGroupRegexString).toBe('regex string');
     });
 
+    it('sets regexString on groupBy REGEX_BY_EXP', () => {
+      const state = buildRunsState({
+        initialGroupBy: {key: GroupByKey.EXPERIMENT},
+      });
+
+      const partialState: URLDeserializedState = {
+        runs: {
+          groupBy: {key: GroupByKey.REGEX_BY_EXP, regexString: 'regex string'},
+          regexFilter: null,
+        },
+      };
+      const nextState = runsReducers.reducers(
+        state,
+        stateRehydratedFromUrl({
+          routeKind: RouteKind.COMPARE_EXPERIMENT,
+          partialState,
+        })
+      );
+
+      expect(nextState.data.colorGroupRegexString).toBe('regex string');
+    });
+
     it('does not set regexFilter when null value provided', () => {
       const state = buildRunsState({
         regexFilter: 'hello',
@@ -1287,7 +1433,7 @@ describe('runs_reducers', () => {
       expect(nextState.data.userSetGroupByKey).toBe(GroupByKey.EXPERIMENT);
     });
 
-    it('set regexFilter and userSetGroupBy to be group by regex', () => {
+    it('set regexFilter and userSetGroupBy to be group by run name regex', () => {
       const state = buildRunsState({
         colorGroupRegexString: '',
         initialGroupBy: {key: GroupByKey.RUN},
@@ -1312,6 +1458,34 @@ describe('runs_reducers', () => {
 
       expect(nextState.data.regexFilter).toBe('world');
       expect(nextState.data.userSetGroupByKey).toBe(GroupByKey.REGEX);
+      expect(nextState.data.colorGroupRegexString).toBe('train');
+    });
+
+    it('set regexFilter and userSetGroupBy to be group by experiment name regex', () => {
+      const state = buildRunsState({
+        colorGroupRegexString: '',
+        initialGroupBy: {key: GroupByKey.RUN},
+        userSetGroupByKey: GroupByKey.EXPERIMENT,
+        regexFilter: 'hello',
+      });
+
+      const partialState: URLDeserializedState = {
+        runs: {
+          groupBy: {key: GroupByKey.REGEX_BY_EXP, regexString: 'train'},
+          regexFilter: 'world',
+        },
+      };
+
+      const nextState = runsReducers.reducers(
+        state,
+        stateRehydratedFromUrl({
+          routeKind: RouteKind.EXPERIMENT,
+          partialState,
+        })
+      );
+
+      expect(nextState.data.regexFilter).toBe('world');
+      expect(nextState.data.userSetGroupByKey).toBe(GroupByKey.REGEX_BY_EXP);
       expect(nextState.data.colorGroupRegexString).toBe('train');
     });
   });
@@ -1351,6 +1525,296 @@ describe('runs_reducers', () => {
       );
 
       expect(nextState.data.initialGroupBy.key).toBe(GroupByKey.RUN);
+    });
+
+    it('adds the experiment alias column to the runs table columns list', () => {
+      const state = buildRunsState(
+        {},
+        {
+          runsTableHeaders: [
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+            },
+          ],
+        }
+      );
+      const nextState = runsReducers.reducers(
+        state,
+        buildNavigatedAction({
+          before: buildRoute({routeKind: RouteKind.EXPERIMENT}),
+          after: buildCompareRoute(['eid1:run1', 'eid1:run2']),
+        })
+      );
+      expect(
+        nextState.ui.runsTableHeaders.map((column) => column.name)
+      ).toEqual(['run', 'experimentAlias']);
+    });
+
+    it('does not add duplicate experiment alias columns', () => {
+      const state = buildRunsState(
+        {},
+        {
+          runsTableHeaders: [
+            {
+              type: ColumnHeaderType.CUSTOM,
+              name: 'experimentAlias',
+              displayName: 'Experiment',
+              enabled: true,
+            },
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+            },
+          ],
+        }
+      );
+      const nextState = runsReducers.reducers(
+        state,
+        buildNavigatedAction({
+          before: buildRoute({routeKind: RouteKind.EXPERIMENT}),
+          after: buildCompareRoute(['eid1:run1', 'eid1:run2']),
+        })
+      );
+      expect(
+        nextState.ui.runsTableHeaders.map((column) => column.name)
+      ).toEqual(['experimentAlias', 'run']);
+    });
+
+    it('removes the experiment alias column when changing away comparison view', () => {
+      const state = buildRunsState(
+        {},
+        {
+          runsTableHeaders: [
+            {
+              type: ColumnHeaderType.CUSTOM,
+              name: 'experimentAlias',
+              displayName: 'Experiment',
+              enabled: true,
+            },
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+            },
+          ],
+        }
+      );
+
+      const nextState = runsReducers.reducers(
+        state,
+        buildNavigatedAction({
+          before: buildCompareRoute(['eid1:run1', 'eid1:run2']),
+          after: buildRoute({routeKind: RouteKind.EXPERIMENT}),
+        })
+      );
+      expect(
+        nextState.ui.runsTableHeaders.map((column) => column.name)
+      ).toEqual(['run']);
+    });
+  });
+
+  describe('runsTableHeaderAdded', () => {
+    let state: RunsState;
+
+    beforeEach(() => {
+      state = buildRunsState(
+        {},
+        {
+          runsTableHeaders: [
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+            },
+            {
+              type: ColumnHeaderType.VALUE,
+              name: 'value',
+              displayName: 'Value',
+              enabled: true,
+            },
+          ],
+        }
+      );
+    });
+
+    it('adds new column to end of list when no index is provided', () => {
+      const nextState = runsReducers.reducers(
+        state,
+        actions.runsTableHeaderAdded({
+          header: {
+            type: ColumnHeaderType.COLOR,
+            name: 'color',
+            displayName: 'Color',
+            enabled: true,
+          },
+        })
+      );
+      expect(
+        nextState.ui.runsTableHeaders.map((header) => header.type)
+      ).toEqual([
+        ColumnHeaderType.RUN,
+        ColumnHeaderType.VALUE,
+        ColumnHeaderType.COLOR,
+      ]);
+    });
+
+    it('adds new column at the specified index', () => {
+      const nextState = runsReducers.reducers(
+        state,
+        actions.runsTableHeaderAdded({
+          header: {
+            type: ColumnHeaderType.COLOR,
+            name: 'color',
+            displayName: 'Color',
+            enabled: true,
+          },
+          index: 1,
+        })
+      );
+      expect(
+        nextState.ui.runsTableHeaders.map((header) => header.type)
+      ).toEqual([
+        ColumnHeaderType.RUN,
+        ColumnHeaderType.COLOR,
+        ColumnHeaderType.VALUE,
+      ]);
+    });
+  });
+
+  describe('runsTableHeaderRemoved', () => {
+    it('removes all headers with the same name as the provided header', () => {
+      const state = buildRunsState(
+        {},
+        {
+          runsTableHeaders: [
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+            },
+            {
+              type: ColumnHeaderType.COLOR,
+              name: 'color',
+              displayName: 'Color',
+              enabled: true,
+            },
+          ],
+        }
+      );
+
+      const nextState = runsReducers.reducers(
+        state,
+        actions.runsTableHeaderRemoved({
+          header: {
+            type: ColumnHeaderType.RUN,
+            name: 'run',
+            displayName: 'RUN',
+            enabled: true,
+          },
+        })
+      );
+      expect(nextState.ui.runsTableHeaders).toEqual([
+        {
+          type: ColumnHeaderType.COLOR,
+          name: 'color',
+          displayName: 'Color',
+          enabled: true,
+        },
+      ]);
+    });
+  });
+
+  describe('runsTableHeaderOrderChanged', () => {
+    it('sets the new headers as the runsTableHeaders', () => {
+      const state = buildRunsState(
+        {},
+        {
+          runsTableHeaders: [
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+            },
+            {
+              type: ColumnHeaderType.COLOR,
+              name: 'color',
+              displayName: 'Color',
+              enabled: true,
+            },
+          ],
+        }
+      );
+
+      const nextState = runsReducers.reducers(
+        state,
+        actions.runsTableHeaderOrderChanged({
+          newHeaderOrder: [
+            {
+              type: ColumnHeaderType.COLOR,
+              name: 'color',
+              displayName: 'Color',
+              enabled: true,
+            },
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+            },
+          ],
+        })
+      );
+
+      expect(nextState.ui.runsTableHeaders).toEqual([
+        {
+          type: ColumnHeaderType.COLOR,
+          name: 'color',
+          displayName: 'Color',
+          enabled: true,
+        },
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
+        },
+      ]);
+    });
+  });
+
+  describe('runsTableSortingInfoChanged', () => {
+    it('returns the current runs table sorting info', () => {
+      const state = buildRunsState(
+        {},
+        {
+          sortingInfo: {
+            name: 'run',
+            order: SortingOrder.ASCENDING,
+          },
+        }
+      );
+      const nextState = runsReducers.reducers(
+        state,
+        actions.runsTableSortingInfoChanged({
+          sortingInfo: {
+            name: 'lr',
+            order: SortingOrder.DESCENDING,
+          },
+        })
+      );
+      expect(nextState.ui.sortingInfo).toEqual({
+        name: 'lr',
+        order: SortingOrder.DESCENDING,
+      });
     });
   });
 });

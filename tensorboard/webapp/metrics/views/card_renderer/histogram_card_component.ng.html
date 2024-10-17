@@ -32,7 +32,6 @@ limitations under the License.
   <span class="controls">
     <button
       mat-icon-button
-      class="pin-button"
       i18n-aria-label="A button to pin a card."
       aria-label="Pin card"
       [attr.title]="isPinned ? 'Unpin card' : 'Pin card'"
@@ -50,7 +49,7 @@ limitations under the License.
       (click)="onFullSizeToggle.emit()"
     >
       <mat-icon
-        [svgIcon]="showFullSize ? 'fullscreen_exit_24px' : 'fullscreen_24px'"
+        [svgIcon]="showFullWidth ? 'fullscreen_exit_24px' : 'fullscreen_24px'"
       ></mat-icon>
     </button>
   </span>

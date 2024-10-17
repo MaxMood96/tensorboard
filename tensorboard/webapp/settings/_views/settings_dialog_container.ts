@@ -27,6 +27,7 @@ import {
 import {State} from '../_redux/settings_types';
 
 @Component({
+  standalone: false,
   selector: 'settings-dialog',
   template: `
     <settings-dialog-component
@@ -40,11 +41,15 @@ import {State} from '../_redux/settings_types';
   `,
 })
 export class SettingsDialogContainer {
-  readonly reloadEnabled$ = this.store.select(getReloadEnabled);
-  readonly reloadPeriodInMs$ = this.store.select(getReloadPeriodInMs);
-  readonly pageSize$ = this.store.select(getPageSize);
+  readonly reloadEnabled$;
+  readonly reloadPeriodInMs$;
+  readonly pageSize$;
 
-  constructor(private store: Store<State>) {}
+  constructor(private store: Store<State>) {
+    this.reloadEnabled$ = this.store.select(getReloadEnabled);
+    this.reloadPeriodInMs$ = this.store.select(getReloadPeriodInMs);
+    this.pageSize$ = this.store.select(getPageSize);
+  }
 
   onReloadToggled(): void {
     this.store.dispatch(toggleReloadEnabled());

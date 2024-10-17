@@ -32,15 +32,21 @@ import {
 } from '../../../widgets/card_fob/card_fob_types';
 import {HistogramDatum} from '../../../widgets/histogram/histogram_types';
 import {buildNormalizedHistograms} from '../../../widgets/histogram/histogram_util';
-import {stepSelectorToggled, timeSelectionChanged} from '../../actions';
+import {
+  metricsCardFullSizeToggled,
+  stepSelectorToggled,
+  timeSelectionChanged,
+} from '../../actions';
 import {HistogramStepDatum, PluginType} from '../../data_source';
 import {
   getCardLoadState,
   getCardMetadata,
   getCardPinnedState,
+  getCardStateMap,
   getCardTimeSeries,
   getMetricsHistogramMode,
   getMetricsLinkedTimeSelection,
+  getMetricsRangeSelectionEnabled,
   getMetricsXAxisType,
 } from '../../store';
 import {CardId, CardMetadata} from '../../types';
@@ -48,6 +54,7 @@ import {CardRenderer} from '../metrics_view_types';
 import {getTagDisplayName} from '../utils';
 import {
   maybeClipTimeSelectionView,
+  maybeOmitTimeSelectionEnd,
   maybeSetClosestStartStep,
   TimeSelectionView,
 } from './utils';
@@ -58,6 +65,7 @@ type HistogramCardMetadata = CardMetadata & {
 };
 
 @Component({
+  standalone: false,
   selector: 'histogram-card',
   template: `
     <histogram-card-component
@@ -69,7 +77,7 @@ type HistogramCardMetadata = CardMetadata & {
       [mode]="mode$ | async"
       [xAxisType]="xAxisType$ | async"
       [runColorScale]="runColorScale"
-      [showFullSize]="showFullSize"
+      [showFullWidth]="showFullWidth$ | async"
       [isPinned]="isPinned$ | async"
       [isClosestStepHighlighted]="isClosestStepHighlighted$ | async"
       [linkedTimeSelection]="linkedTimeSelection$ | async"
@@ -91,13 +99,17 @@ type HistogramCardMetadata = CardMetadata & {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HistogramCardContainer implements CardRenderer, OnInit {
-  constructor(private readonly store: Store<State>) {}
+  constructor(private readonly store: Store<State>) {
+    this.mode$ = this.store.select(getMetricsHistogramMode);
+    this.xAxisType$ = this.store.select(getMetricsXAxisType);
+    this.showFullWidth$ = this.store
+      .select(getCardStateMap)
+      .pipe(map((map) => map[this.cardId]?.fullWidth));
+  }
 
   @Input() cardId!: CardId;
   @Input() groupName!: string | null;
   @Input() runColorScale!: RunColorScale;
-  @Output() fullWidthChanged = new EventEmitter<boolean>();
-  @Output() fullHeightChanged = new EventEmitter<boolean>();
   @Output() pinStateChanged = new EventEmitter<boolean>();
 
   loadState$?: Observable<DataLoadState>;
@@ -105,9 +117,9 @@ export class HistogramCardContainer implements CardRenderer, OnInit {
   tag$?: Observable<string>;
   runId$?: Observable<string>;
   data$?: Observable<HistogramDatum[]>;
-  mode$ = this.store.select(getMetricsHistogramMode);
-  xAxisType$ = this.store.select(getMetricsXAxisType);
-  showFullSize = false;
+  mode$;
+  xAxisType$;
+  readonly showFullWidth$;
   isPinned$?: Observable<boolean>;
   linkedTimeSelection$?: Observable<TimeSelectionView | null>;
   isClosestStepHighlighted$?: Observable<boolean | null>;
@@ -122,9 +134,7 @@ export class HistogramCardContainer implements CardRenderer, OnInit {
   }
 
   onFullSizeToggle() {
-    this.showFullSize = !this.showFullSize;
-    this.fullWidthChanged.emit(this.showFullSize);
-    this.fullHeightChanged.emit(this.showFullSize);
+    this.store.dispatch(metricsCardFullSizeToggled({cardId: this.cardId}));
   }
 
   /**
@@ -170,8 +180,9 @@ export class HistogramCardContainer implements CardRenderer, OnInit {
     this.linkedTimeSelection$ = combineLatest([
       this.store.select(getMetricsLinkedTimeSelection),
       this.steps$,
+      this.store.select(getMetricsRangeSelectionEnabled),
     ]).pipe(
-      map(([linkedTimeSelection, steps]) => {
+      map(([linkedTimeSelection, steps, rangeSelectionEnabled]) => {
         if (!linkedTimeSelection) return null;
 
         let minStep = Infinity;
@@ -180,8 +191,12 @@ export class HistogramCardContainer implements CardRenderer, OnInit {
           minStep = Math.min(step, minStep);
           maxStep = Math.max(step, maxStep);
         }
-        const linkedTimeSelectionView = maybeClipTimeSelectionView(
+        const formattedTimeSelection = maybeOmitTimeSelectionEnd(
           linkedTimeSelection,
+          rangeSelectionEnabled
+        );
+        const linkedTimeSelectionView = maybeClipTimeSelectionView(
+          formattedTimeSelection,
           minStep,
           maxStep
         );

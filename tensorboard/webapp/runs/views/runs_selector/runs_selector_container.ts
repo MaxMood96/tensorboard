@@ -20,32 +20,33 @@ import {getExperimentIdsFromRoute} from '../../../selectors';
 import {RunsTableColumn} from '../runs_table/types';
 
 @Component({
+  standalone: false,
   selector: 'runs-selector',
   template: `
     <runs-selector-component
       [experimentIds]="experimentIds$ | async"
       [columns]="columns$ | async"
-      [showHparamsAndMetrics]="showHparamsAndMetrics"
     ></runs-selector-component>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RunsSelectorContainer {
-  @Input() showHparamsAndMetrics?: boolean;
+  readonly experimentIds$;
+  readonly columns$;
 
-  readonly experimentIds$ = this.store
-    .select(getExperimentIdsFromRoute)
-    .pipe(map((experimentIdsOrNull) => experimentIdsOrNull ?? []));
-  readonly columns$ = this.store.select(getExperimentIdsFromRoute).pipe(
-    map((ids) => {
-      return [
-        RunsTableColumn.CHECKBOX,
-        RunsTableColumn.RUN_NAME,
-        ids && ids.length > 1 ? RunsTableColumn.EXPERIMENT_NAME : null,
-        RunsTableColumn.RUN_COLOR,
-      ].filter((col) => col !== null) as RunsTableColumn[];
-    })
-  );
-
-  constructor(private readonly store: Store<State>) {}
+  constructor(private readonly store: Store<State>) {
+    this.experimentIds$ = this.store
+      .select(getExperimentIdsFromRoute)
+      .pipe(map((experimentIdsOrNull) => experimentIdsOrNull ?? []));
+    this.columns$ = this.store.select(getExperimentIdsFromRoute).pipe(
+      map((ids) => {
+        return [
+          RunsTableColumn.CHECKBOX,
+          RunsTableColumn.RUN_NAME,
+          ids && ids.length > 1 ? RunsTableColumn.EXPERIMENT_NAME : null,
+          RunsTableColumn.RUN_COLOR,
+        ].filter((col) => col !== null) as RunsTableColumn[];
+      })
+    );
+  }
 }

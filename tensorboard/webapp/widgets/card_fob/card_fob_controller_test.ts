@@ -27,6 +27,7 @@ import {
 } from './card_fob_types';
 
 @Component({
+  standalone: false,
   selector: 'testable-comp',
   template: `
     <card-fob-controller
@@ -40,7 +41,6 @@ import {
       [lowestStep]="lowestStep"
       [cardFobHelper]="cardFobHelper"
       [showExtendedLine]="showExtendedLine"
-      [isProspectiveFobFeatureEnabled]="isProspectiveFobFeatureEnabled"
       [prospectiveStep]="prospectiveStep"
       (onTimeSelectionChanged)="onTimeSelectionChanged($event)"
       (onTimeSelectionToggled)="onTimeSelectionToggled()"
@@ -61,7 +61,6 @@ class TestableComponent {
   @Input() getAxisPositionFromStartStep!: () => number;
   @Input() getAxisPositionFromEndStep!: () => number;
   @Input() getAxisPositionFromProspectiveStep!: () => number;
-  @Input() isProspectiveFobFeatureEnabled!: Boolean;
   @Input() prospectiveStep!: number | null;
 
   @Input() onTimeSelectionChanged!: (newTimeSelection: TimeSelection) => void;
@@ -96,7 +95,6 @@ describe('card_fob_controller', () => {
     timeSelection: TimeSelection;
     showExtendedLine?: Boolean;
     steps?: number[];
-    isProspectiveFobFeatureEnabled?: Boolean;
     prospectiveStep?: number | null;
   }): ComponentFixture<TestableComponent> {
     const fixture = TestBed.createComponent(TestableComponent);
@@ -154,8 +152,6 @@ describe('card_fob_controller', () => {
     fixture.componentInstance.showExtendedLine =
       input.showExtendedLine ?? false;
 
-    fixture.componentInstance.isProspectiveFobFeatureEnabled =
-      input.isProspectiveFobFeatureEnabled ?? false;
     fixture.componentInstance.prospectiveStep = input.prospectiveStep ?? null;
 
     onTimeSelectionChanged = jasmine.createSpy();
@@ -1304,10 +1300,9 @@ describe('card_fob_controller', () => {
   });
 
   describe('prospective fob', () => {
-    it('renders when feature flag is enabled and the step is not null', () => {
+    it('renders when step is not null', () => {
       const fixture = createComponent({
         timeSelection: {start: {step: 4}, end: null},
-        isProspectiveFobFeatureEnabled: true,
         prospectiveStep: 2,
       });
       fixture.detectChanges();
@@ -1318,23 +1313,9 @@ describe('card_fob_controller', () => {
       expect(prospectiveFob).toBeTruthy();
     });
 
-    it('does not render when feature flag is disabled', () => {
-      const fixture = createComponent({
-        timeSelection: {start: {step: 4}, end: null},
-        isProspectiveFobFeatureEnabled: false,
-        prospectiveStep: 2,
-      });
-      fixture.detectChanges();
-
-      expect(
-        fixture.componentInstance.fobController.prospectiveFobWrapper
-      ).toBeUndefined();
-    });
-
     it('does not render when step is null', () => {
       const fixture = createComponent({
         timeSelection: {start: {step: 4}, end: null},
-        isProspectiveFobFeatureEnabled: true,
         prospectiveStep: null,
       });
       fixture.detectChanges();
@@ -1348,7 +1329,6 @@ describe('card_fob_controller', () => {
       const fixture = createComponent({
         timeSelection: {start: {step: 4}, end: null},
         axisDirection: AxisDirection.HORIZONTAL,
-        isProspectiveFobFeatureEnabled: true,
         prospectiveStep: 2,
       });
       fixture.detectChanges();
@@ -1365,7 +1345,6 @@ describe('card_fob_controller', () => {
       const fixture = createComponent({
         timeSelection: {start: {step: 4}, end: null},
         axisDirection: AxisDirection.VERTICAL,
-        isProspectiveFobFeatureEnabled: true,
         prospectiveStep: 2,
       });
       fixture.detectChanges();
@@ -1383,7 +1362,6 @@ describe('card_fob_controller', () => {
         const fixture = createComponent({
           timeSelection: {start: {step: 4}, end: null},
           axisDirection: AxisDirection.VERTICAL,
-          isProspectiveFobFeatureEnabled: true,
           prospectiveStep: 2,
         });
         fixture.detectChanges();
@@ -1412,7 +1390,6 @@ describe('card_fob_controller', () => {
         const fixture = createComponent({
           timeSelection: {start: {step: 4}, end: null},
           axisDirection: AxisDirection.HORIZONTAL,
-          isProspectiveFobFeatureEnabled: true,
           prospectiveStep: 2,
         });
         fixture.detectChanges();

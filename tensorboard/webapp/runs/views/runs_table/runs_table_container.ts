@@ -25,8 +25,6 @@ import {
   distinctUntilChanged,
   filter,
   map,
-  shareReplay,
-  startWith,
   switchMap,
   take,
   takeUntil,
@@ -34,50 +32,46 @@ import {
 import * as alertActions from '../../../alert/actions';
 import {areSameRouteKindAndExperiments} from '../../../app_routing';
 import {State} from '../../../app_state';
-import {ExperimentAlias} from '../../../experiments/types';
 import {
   actions as hparamsActions,
   selectors as hparamsSelectors,
 } from '../../../hparams';
 import {
-  DiscreteFilter,
-  DiscreteHparamValue,
-  DiscreteHparamValues,
-  DomainType,
-  IntervalFilter,
-} from '../../../hparams/types';
+  getCurrentColumnFilters,
+  getFilteredRenderableRuns,
+  getSelectableColumns,
+} from '../../../metrics/views/main_view/common_selectors';
 import {
   getActiveRoute,
   getCurrentRouteRunSelection,
   getExperiment,
   getExperimentIdToExperimentAliasMap,
+  getGroupedRunsTableHeaders,
   getRunColorMap,
   getRuns,
-  getRunSelectorPaginationOption,
   getRunSelectorRegexFilter,
-  getRunSelectorSort,
   getRunsLoadState,
+  getRunsTableSortingInfo,
 } from '../../../selectors';
 import {DataLoadState, LoadState} from '../../../types/data';
-import {SortDirection} from '../../../types/ui';
-import {matchRunToRegex} from '../../../util/matcher';
+import {
+  AddColumnEvent,
+  ColumnHeader,
+  FilterAddedEvent,
+  ReorderColumnEvent,
+  SortingInfo,
+  TableData,
+} from '../../../widgets/data_table/types';
 import {
   runColorChanged,
   runPageSelectionToggled,
   runSelectionToggled,
-  runSelectorPaginationOptionChanged,
   runSelectorRegexFilterChanged,
-  runSelectorSortChanged,
-  runTableShown,
+  runsTableSortingInfoChanged,
   singleRunSelected,
 } from '../../actions';
 import {MAX_NUM_RUNS_TO_ENABLE_BY_DEFAULT} from '../../store/runs_types';
-import {SortKey, SortType} from '../../types';
-import {
-  HparamColumn,
-  IntervalFilterChange,
-  MetricColumn,
-} from './runs_table_component';
+import {sortTableDataItems} from './sorting_utils';
 import {RunsTableColumn, RunTableItem} from './types';
 
 const getRunsLoading = createSelector<
@@ -87,97 +81,6 @@ const getRunsLoading = createSelector<
   boolean
 >(getRunsLoadState, (loadState) => loadState.state === DataLoadState.LOADING);
 
-function getPropsForSort(
-  item: RunTableItem,
-  key: SortKey
-): Array<ExperimentAlias | string | number | boolean | undefined> {
-  switch (key.type) {
-    case SortType.EXPERIMENT_NAME:
-      return [item.experimentAlias, item.run.name, item.run.id];
-    case SortType.RUN_NAME:
-      return [item.run.name, item.experimentAlias, item.run.id];
-    case SortType.HPARAM:
-      return [
-        item.hparams.get(key.name),
-        item.run.name,
-        item.experimentAlias,
-        item.run.id,
-      ];
-    case SortType.METRIC:
-      return [
-        item.metrics.get(key.tag),
-        item.run.name,
-        item.experimentAlias,
-        item.run.id,
-      ];
-    default:
-      const _ = key as never;
-      throw new Error(`Not yet implemented: ${_}`);
-  }
-}
-
-function sortRunTableItems(
-  items: RunTableItem[],
-  sort: {key: SortKey | null; direction: SortDirection}
-): RunTableItem[] {
-  const sortKey = sort.key;
-  const sortedItems = [...items];
-  if (sortKey === null || sort.direction === SortDirection.UNSET) {
-    return sortedItems;
-  }
-
-  sortedItems.sort((a, b) => {
-    const aProps = getPropsForSort(a, sortKey);
-    const bProps = getPropsForSort(b, sortKey);
-    if (aProps.length !== bProps.length) {
-      throw new Error(
-        'Invariant error: a given sort should result in same number of ' +
-          `items: ${sort}`
-      );
-    }
-
-    for (let index = 0; index < aProps.length; index++) {
-      const valA = aProps[index];
-      const valB = bProps[index];
-      if (valA === valB) {
-        continue;
-      }
-
-      if (valA === undefined || valB === undefined) {
-        return valB === undefined ? -1 : 1;
-      }
-
-      if (typeof valA !== typeof valB) {
-        throw new Error(
-          `Cannot compare values of different types: ` +
-            `${typeof valA} vs. ${typeof valB}`
-        );
-      }
-      return valA < valB === (sort.direction === SortDirection.ASC) ? -1 : 1;
-    }
-    return 0;
-  });
-  return sortedItems;
-}
-
-function matchFilter(
-  filter: DiscreteFilter | IntervalFilter,
-  value: number | DiscreteHparamValue | undefined
-): boolean {
-  if (value === undefined) {
-    return filter.includeUndefined;
-  }
-  if (filter.type === DomainType.DISCRETE) {
-    // (upcast to work around bad TypeScript libdefs)
-    const values: Readonly<Array<typeof filter.filterValues[number]>> =
-      filter.filterValues;
-    return values.includes(value);
-  } else if (filter.type === DomainType.INTERVAL) {
-    return filter.filterLowerValue <= value && value <= filter.filterUpperValue;
-  }
-  return false;
-}
-
 /**
  * Renders list of experiments.
  *
@@ -185,46 +88,42 @@ function matchFilter(
  * update when input bindings change.
  */
 @Component({
+  standalone: false,
   selector: 'runs-table',
   template: `
-    <runs-table-component
+    <runs-data-table
+      [headers]="runsColumns$ | async"
+      [data]="sortedRunsTableData$ | async"
+      [selectableColumns]="selectableColumns$ | async"
+      [numColumnsLoaded]="numColumnsLoaded$ | async"
+      [numColumnsToLoad]="numColumnsToLoad$ | async"
+      [columnFilters]="columnFilters$ | async"
+      [sortingInfo]="sortingInfo$ | async"
       [experimentIds]="experimentIds"
-      [useFlexibleLayout]="useFlexibleLayout"
-      [numSelectedItems]="numSelectedItems$ | async"
-      [columns]="columns"
-      [hparamColumns]="hparamColumns$ | async"
-      [metricColumns]="metricColumns$ | async"
-      [showExperimentName]="isExperimentNameVisible()"
-      [pageItems]="pageItems$ | async"
-      [filteredItemsLength]="filteredItemsLength$ | async"
-      [allItemsLength]="allItemsLength$ | async"
-      [loading]="loading$ | async"
-      [paginationOption]="paginationOption$ | async"
       [regexFilter]="regexFilter$ | async"
-      [sortOption]="sortOption$ | async"
-      [usePagination]="usePagination"
+      [loading]="loading$ | async"
+      (sortDataBy)="sortDataBy($event)"
+      (orderColumns)="orderColumns($event)"
       (onSelectionToggle)="onRunSelectionToggle($event)"
-      (onSelectionDblClick)="onRunSelectionDblClick($event)"
-      (onPageSelectionToggle)="onPageSelectionToggle($event)"
-      (onPaginationChange)="onPaginationChange($event)"
-      (onRegexFilterChange)="onRegexFilterChange($event)"
-      (onSortChange)="onSortChange($event)"
+      (onAllSelectionToggle)="onAllSelectionToggle($event)"
       (onRunColorChange)="onRunColorChange($event)"
-      (onHparamIntervalFilterChanged)="onHparamIntervalFilterChanged($event)"
-      (onHparamDiscreteFilterChanged)="onHparamDiscreteFilterChanged($event)"
-      (onMetricFilterChanged)="onMetricFilterChanged($event)"
-    ></runs-table-component>
+      (onRegexFilterChange)="onRegexFilterChange($event)"
+      (onSelectionDblClick)="onRunSelectionDblClick($event)"
+      (addColumn)="addColumn($event)"
+      (removeColumn)="removeColumn($event)"
+      (addFilter)="addHparamFilter($event)"
+      (loadAllColumns)="loadAllColumns()"
+    ></runs-data-table>
   `,
-  host: {
-    '[class.flex-layout]': 'useFlexibleLayout',
-  },
   styles: [
     `
-      :host.flex-layout {
+      :host {
         display: flex;
+        position: relative;
       }
 
-      :host.flex-layout > runs-table-component {
+      tb-data-table {
+        overflow-y: scroll;
         width: 100%;
       }
     `,
@@ -232,56 +131,73 @@ function matchFilter(
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RunsTableContainer implements OnInit, OnDestroy {
-  private allUnsortedRunTableItems$?: Observable<RunTableItem[]>;
+  sortedRunsTableData$: Observable<TableData[]> = of([]);
   loading$: Observable<boolean> | null = null;
-  filteredItemsLength$?: Observable<number>;
-  allItemsLength$?: Observable<number>;
-  pageItems$?: Observable<RunTableItem[]>;
-  numSelectedItems$?: Observable<number>;
-
-  hparamColumns$: Observable<HparamColumn[]> = of([]);
-  metricColumns$: Observable<MetricColumn[]> = of([]);
-
-  /**
-   * Enables a layout mode intended for scenarios when changing the # of runs
-   * should have no effect on the table's size.
-   *
-   * - height and width span the container height and width
-   * - run list scrolls vertically, not horizontally
-   * - 'name' cells wrap text
-   */
-  @Input() useFlexibleLayout?: boolean = false;
-
-  /**
-   * Whether to use pagination options from the store. If false, the table will
-   * show a single page with all runs.
-   */
-  @Input() usePagination?: boolean = false;
+  sortingInfo$;
 
   // Column to disable in the table. The columns are rendered in the order as
   // defined by this input.
   @Input()
-  columns: RunsTableColumn[] = [RunsTableColumn.RUN_NAME];
+  columns: RunsTableColumn[];
 
   @Input() experimentIds!: string[];
-  @Input() showHparamsAndMetrics = false;
 
-  sortOption$ = this.store.select(getRunSelectorSort);
-  paginationOption$ = this.store.select(getRunSelectorPaginationOption);
-  regexFilter$ = this.store.select(getRunSelectorRegexFilter);
-  private readonly ngUnsubscribe = new Subject<void>();
+  regexFilter$;
+  runsColumns$;
+  selectableColumns$;
+  numColumnsLoaded$;
+  numColumnsToLoad$;
 
-  constructor(private readonly store: Store<State>) {}
+  columnFilters$;
 
-  isExperimentNameVisible() {
-    return this.columns.some((column) => {
-      return column === RunsTableColumn.EXPERIMENT_NAME;
-    });
+  allRunsTableData$;
+
+  private readonly ngUnsubscribe;
+
+  constructor(private readonly store: Store<State>) {
+    this.sortingInfo$ = this.store.select(getRunsTableSortingInfo);
+    this.columns = [RunsTableColumn.RUN_NAME];
+    this.regexFilter$ = this.store.select(getRunSelectorRegexFilter);
+    this.runsColumns$ = this.store.select(getGroupedRunsTableHeaders);
+    this.selectableColumns$ = this.store.select(getSelectableColumns);
+    this.numColumnsLoaded$ = this.store.select(
+      hparamsSelectors.getNumDashboardHparamsLoaded
+    );
+    this.numColumnsToLoad$ = this.store.select(
+      hparamsSelectors.getNumDashboardHparamsToLoad
+    );
+    this.columnFilters$ = this.store.select(getCurrentColumnFilters);
+    this.allRunsTableData$ = this.store.select(getFilteredRenderableRuns).pipe(
+      map((filteredRenderableRuns) => {
+        return filteredRenderableRuns.map((runTableItem) => {
+          const tableData: TableData = {
+            ...Object.fromEntries(runTableItem.hparams.entries()),
+            id: runTableItem.run.id,
+            run: runTableItem.run.name,
+            experimentName: runTableItem.experimentName,
+            experimentAlias: runTableItem.experimentAlias,
+            selected: runTableItem.selected,
+            color: runTableItem.runColor,
+          };
+          return tableData;
+        });
+      })
+    );
+    this.ngUnsubscribe = new Subject<void>();
   }
 
   ngOnInit() {
     const getRunTableItemsPerExperiment = this.experimentIds.map((id) =>
       this.getRunTableItemsForExperiment(id)
+    );
+
+    this.sortedRunsTableData$ = combineLatest([
+      this.allRunsTableData$,
+      this.sortingInfo$,
+    ]).pipe(
+      map(([items, sortingInfo]) => {
+        return sortTableDataItems(items, sortingInfo);
+      })
     );
 
     const rawAllUnsortedRunTableItems$ = combineLatest(
@@ -290,29 +206,6 @@ export class RunsTableContainer implements OnInit, OnDestroy {
       map((itemsForExperiments: RunTableItem[][]) => {
         const items = [] as RunTableItem[];
         return items.concat(...itemsForExperiments);
-      })
-    );
-    this.allUnsortedRunTableItems$ = rawAllUnsortedRunTableItems$.pipe(
-      takeUntil(this.ngUnsubscribe),
-      shareReplay(1)
-    );
-    this.allItemsLength$ = this.allUnsortedRunTableItems$.pipe(
-      map((items) => items.length)
-    );
-
-    const getFilteredItems$ = this.getFilteredItems$(
-      this.allUnsortedRunTableItems$
-    ).pipe(takeUntil(this.ngUnsubscribe), shareReplay(1));
-
-    this.filteredItemsLength$ = getFilteredItems$.pipe(
-      map((items) => items.length)
-    );
-    this.pageItems$ = this.sortedAndSlicedItems$(getFilteredItems$);
-    this.numSelectedItems$ = this.allUnsortedRunTableItems$.pipe(
-      map((items) => {
-        return items.reduce((count, item) => {
-          return count + Number(item.selected);
-        }, 0);
       })
     );
 
@@ -324,56 +217,6 @@ export class RunsTableContainer implements OnInit, OnDestroy {
         return experimentsLoading.some((isLoading) => isLoading);
       })
     );
-
-    if (this.showHparamsAndMetrics) {
-      const getHparamAndMetrics$ = this.store.select(
-        hparamsSelectors.getExperimentsHparamsAndMetricsSpecs,
-        {experimentIds: this.experimentIds}
-      );
-
-      // combineLatest, when initializing, emits twice
-      this.hparamColumns$ = combineLatest([
-        this.store.select(
-          hparamsSelectors.getHparamFilterMap,
-          this.experimentIds
-        ),
-        getHparamAndMetrics$,
-      ]).pipe(
-        map(([filterMap, {hparams}]) => {
-          return hparams.map(({name, displayName, domain}) => {
-            const filter = filterMap.get(name);
-            if (!filter) {
-              throw new RangeError(
-                `Invariant error: a filter for ${name} must exist` +
-                  ` when the hparam exists`
-              );
-            }
-            return {displayName, name, filter};
-          });
-        })
-      );
-
-      this.metricColumns$ = combineLatest([
-        this.store.select(
-          hparamsSelectors.getMetricFilterMap,
-          this.experimentIds
-        ),
-        getHparamAndMetrics$,
-      ]).pipe(
-        map(([filterMap, {metrics}]) => {
-          return metrics.map(({tag, displayName}) => {
-            const filter = filterMap.get(tag);
-            if (!filter) {
-              throw new RangeError(
-                `Invariant error: a filter for ${tag} must exist ` +
-                  `when the metric exists`
-              );
-            }
-            return {displayName, tag, filter};
-          });
-        })
-      );
-    }
 
     /**
      * For consumers who show checkboxes, notify users that new runs may not be
@@ -415,8 +258,6 @@ export class RunsTableContainer implements OnInit, OnDestroy {
         );
       });
     }
-
-    this.store.dispatch(runTableShown({experimentIds: this.experimentIds}));
   }
 
   ngOnDestroy() {
@@ -424,93 +265,8 @@ export class RunsTableContainer implements OnInit, OnDestroy {
     this.ngUnsubscribe.complete();
   }
 
-  private getFilteredItems$(runItems$: Observable<RunTableItem[]>) {
-    return combineLatest([
-      runItems$,
-      this.store.select(getRunSelectorRegexFilter),
-    ]).pipe(
-      map(([items, regexString]) => {
-        if (!regexString) {
-          return items;
-        }
-
-        const shouldIncludeExperimentName = this.columns.includes(
-          RunsTableColumn.EXPERIMENT_NAME
-        );
-        return items.filter((item) => {
-          return matchRunToRegex(
-            {
-              runName: item.run.name,
-              experimentAlias: item.experimentAlias,
-            },
-            regexString,
-            shouldIncludeExperimentName
-          );
-        });
-      }),
-      switchMap((items) => {
-        if (!this.showHparamsAndMetrics) {
-          return of(items);
-        }
-
-        return combineLatest(
-          this.store.select(
-            hparamsSelectors.getHparamFilterMap,
-            this.experimentIds
-          ),
-          this.store.select(
-            hparamsSelectors.getMetricFilterMap,
-            this.experimentIds
-          )
-        ).pipe(
-          map(([hparamFilters, metricFilters]) => {
-            return items.filter(({hparams, metrics}) => {
-              const hparamMatches = [...hparamFilters.entries()].every(
-                ([hparamName, filter]) => {
-                  const value = hparams.get(hparamName);
-                  return matchFilter(filter, value);
-                }
-              );
-
-              return (
-                hparamMatches &&
-                [...metricFilters.entries()].every(([metricTag, filter]) => {
-                  const value = metrics.get(metricTag);
-                  return matchFilter(filter, value);
-                })
-              );
-            });
-          })
-        );
-      })
-    );
-  }
-
-  private sortedAndSlicedItems$(filteredItems$: Observable<RunTableItem[]>) {
-    const sortedItems = combineLatest([
-      filteredItems$,
-      this.store.select(getRunSelectorSort),
-    ]).pipe(
-      map(([items, sort]) => {
-        return sortRunTableItems(items, sort);
-      })
-    );
-
-    const slicedItems = combineLatest([
-      sortedItems,
-      this.store.select(getRunSelectorPaginationOption),
-    ]).pipe(
-      map(([items, paginationOption]) => {
-        if (!this.usePagination) {
-          return items.slice();
-        }
-        const {pageSize, pageIndex} = paginationOption;
-        return items.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
-      }),
-      startWith([])
-    );
-
-    return slicedItems;
+  sortDataBy(sortingInfo: SortingInfo) {
+    this.store.dispatch(runsTableSortingInfoChanged({sortingInfo}));
   }
 
   private getRunTableItemsForExperiment(
@@ -547,61 +303,28 @@ export class RunsTableContainer implements OnInit, OnDestroy {
     );
   }
 
-  onRunSelectionToggle(item: RunTableItem) {
+  onRunSelectionToggle(id: string) {
     this.store.dispatch(
       runSelectionToggled({
-        runId: item.run.id,
+        runId: id,
       })
     );
   }
 
-  onRunSelectionDblClick(item: RunTableItem) {
-    // Note that a user's double click will trigger both 'change' and 'dblclick'
-    // events so onRunSelectionToggle() will also be called and we will fire
-    // two somewhat conflicting actions: runSelectionToggled and
-    // singleRunSelected. This is ok as long as singleRunSelected is fired last.
-    //
-    // We are therefore relying on the mat-checkbox 'change' event consistently
-    // being fired before the 'dblclick' event. Although we don't have any
-    // documentation that guarantees this order, we do have documentation that
-    // states that 'click' is guaranteed to occur before 'dblclick'
-    // (see https://www.quirksmode.org/dom/events/click.html). We presume, then,
-    // that we can rely on the 'change' event being fired before the 'dblclick'
-    // event.
+  onRunSelectionDblClick(runId: string) {
     this.store.dispatch(
       singleRunSelected({
-        runId: item.run.id,
+        runId,
       })
     );
   }
 
-  // When `usePagination` is false, page selection affects the single page,
-  // containing all items.
-  onPageSelectionToggle(event: {items: RunTableItem[]}) {
-    const {items} = event;
-    const runIds = items.map(({run}) => run.id);
-
+  onAllSelectionToggle(runIds: string[]) {
     this.store.dispatch(
       runPageSelectionToggled({
         runIds,
       })
     );
-  }
-
-  onPaginationChange(event: {pageIndex: number; pageSize: number}) {
-    if (!this.usePagination) {
-      throw new Error(
-        'Pagination events cannot be dispatched when pagination is disabled'
-      );
-    }
-    const {pageIndex, pageSize} = event;
-    this.store.dispatch(
-      runSelectorPaginationOptionChanged({pageIndex, pageSize})
-    );
-  }
-
-  onSortChange(sort: {key: SortKey; direction: SortDirection}) {
-    this.store.dispatch(runSelectorSortChanged(sort));
   }
 
   onRegexFilterChange(regexString: string) {
@@ -612,46 +335,39 @@ export class RunsTableContainer implements OnInit, OnDestroy {
     this.store.dispatch(runColorChanged({runId, newColor}));
   }
 
-  onHparamDiscreteFilterChanged(event: {
-    hparamName: string;
-    includeUndefined: boolean;
-    filterValues: DiscreteHparamValues;
-  }) {
-    const {hparamName, filterValues, includeUndefined} = event;
+  addColumn({column, nextTo, side}: AddColumnEvent) {
     this.store.dispatch(
-      hparamsActions.hparamsDiscreteHparamFilterChanged({
-        experimentIds: this.experimentIds,
-        hparamName,
-        filterValues,
-        includeUndefined,
+      hparamsActions.dashboardHparamColumnAdded({
+        column,
+        nextTo,
+        side,
       })
     );
   }
 
-  onHparamIntervalFilterChanged(event: IntervalFilterChange) {
-    const {name, filterLowerValue, filterUpperValue, includeUndefined} = event;
+  removeColumn(header: ColumnHeader) {
     this.store.dispatch(
-      hparamsActions.hparamsIntervalHparamFilterChanged({
-        experimentIds: this.experimentIds,
-        hparamName: name,
-        filterLowerValue,
-        filterUpperValue,
-        includeUndefined,
+      hparamsActions.dashboardHparamColumnRemoved({column: header})
+    );
+  }
+
+  orderColumns(event: ReorderColumnEvent) {
+    this.store.dispatch(
+      hparamsActions.dashboardHparamColumnOrderChanged(event)
+    );
+  }
+
+  addHparamFilter(event: FilterAddedEvent) {
+    this.store.dispatch(
+      hparamsActions.dashboardHparamFilterAdded({
+        name: event.name,
+        filter: event.value,
       })
     );
   }
 
-  onMetricFilterChanged(event: IntervalFilterChange) {
-    const {name, includeUndefined, filterLowerValue, filterUpperValue} = event;
-    this.store.dispatch(
-      hparamsActions.hparamsMetricFilterChanged({
-        experimentIds: this.experimentIds,
-        metricTag: name,
-        includeUndefined,
-        filterLowerValue,
-        filterUpperValue,
-      })
-    );
+  loadAllColumns() {
+    this.store.dispatch(hparamsActions.loadAllDashboardHparams());
   }
 }
 

@@ -66,6 +66,13 @@ tf_ts_library(
 )
 
 tf_ts_library(
+    name = "memoize",
+    srcs = [
+        "memoize.ts",
+    ],
+)
+
+tf_ts_library(
     name = "ui_selectors",
     srcs = [
         "ui_selectors.ts",
@@ -90,8 +97,10 @@ tf_ts_library(
     name = "util_tests",
     testonly = True,
     srcs = [
+        "dom_test.ts",
         "lang_test.ts",
         "matcher_test.ts",
+        "memoize_test.ts",
         "ngrx_test.ts",
         "string_test.ts",
         "ui_selectors_test.ts",
@@ -99,8 +108,10 @@ tf_ts_library(
     ],
     deps = [
         ":colors",
+        ":dom",
         ":lang",
         ":matcher",
+        ":memoize",
         ":ngrx",
         ":string",
         ":ui_selectors",
@@ -114,6 +125,7 @@ tf_ts_library(
         "//tensorboard/webapp/feature_flag/store:testing",
         "//tensorboard/webapp/runs/store:testing",
         "//tensorboard/webapp/settings:testing",
+        "//tensorboard/webapp/testing:utils",
         "@npm//@ngrx/store",
         "@npm//@types/jasmine",
     ],

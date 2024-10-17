@@ -123,10 +123,19 @@ describe('core deeplink provider', () => {
         assert('run', {key: GroupByKey.RUN});
         assert('regex:', {key: GroupByKey.REGEX, regexString: ''});
         assert('regex:hello', {key: GroupByKey.REGEX, regexString: 'hello'});
+        assert('regex_by_exp:', {
+          key: GroupByKey.REGEX_BY_EXP,
+          regexString: '',
+        });
+        assert('regex_by_exp:world', {
+          key: GroupByKey.REGEX_BY_EXP,
+          regexString: 'world',
+        });
         assert('', null);
         assert('regex', null);
         assert('runs', null);
         assert('experiments', null);
+        assert('regex_by_exp', null);
       });
     });
 
@@ -310,6 +319,19 @@ describe('core deeplink provider', () => {
           expect(state.metrics.pinnedCards).toEqual(expectedPinnedCards);
         }
       });
+
+      it('associated unrecognized query params with other plugins', () => {
+        const state = provider.deserializeQueryParams([
+          {key: 'foo', value: 'bar'},
+          {key: 'bar', value: 'foo'},
+          {key: 'smoothing', value: '4'},
+          {key: 'tagFilter', value: 'mytagfilter'},
+        ]);
+        expect(state.unknownQueryParams).toEqual({
+          foo: 'bar',
+          bar: 'foo',
+        });
+      });
     });
 
     describe('tag filter', () => {
@@ -365,6 +387,43 @@ describe('core deeplink provider', () => {
     ]);
   });
 
+  it('serializes unknown query params', () => {
+    store.overrideSelector(selectors.getUnknownQueryParams, {
+      foo: 'bar',
+      bar: 'foo',
+    });
+    store.refreshState();
+
+    expect(queryParamsSerialized[queryParamsSerialized.length - 1]).toEqual([
+      {key: 'foo', value: 'bar'},
+      {key: 'bar', value: 'foo'},
+    ]);
+  });
+
+  it('dedupes unknown query params with feature flags', () => {
+    store.overrideSelector(selectors.getOverriddenFeatureFlags, {
+      enabledExperimentalPlugins: ['foo', 'bar', 'baz'],
+      showFlags: '',
+    });
+    store.overrideSelector(selectors.getUnknownQueryParams, {
+      unknown1: 'unknown1_value',
+      unknown2: 'unknown2_value',
+      // Should be ignored since it is also a feature flag query param.
+      experimentalPlugin:
+        'this_is_known_but_has_different_value_for_some_reason',
+      // Should be ignored since it is also a feature flag query param.
+      showFlags: 'this_is_also_known_and_also_has_different_value',
+    });
+    store.refreshState();
+
+    expect(queryParamsSerialized[queryParamsSerialized.length - 1]).toEqual([
+      {key: 'experimentalPlugin', value: 'foo,bar,baz'},
+      {key: 'showFlags', value: ''},
+      {key: 'unknown1', value: 'unknown1_value'},
+      {key: 'unknown2', value: 'unknown2_value'},
+    ]);
+  });
+
   describe('runs', () => {
     describe('color group', () => {
       it('does not put state in the URL when user set color group is null', () => {
@@ -408,6 +467,15 @@ describe('core deeplink provider', () => {
         expect(queryParamsSerialized[queryParamsSerialized.length - 1]).toEqual(
           [{key: 'runColorGroup', value: 'regex:hello:world'}]
         );
+
+        store.overrideSelector(selectors.getRunUserSetGroupBy, {
+          key: GroupByKey.REGEX_BY_EXP,
+          regexString: 'exp_name',
+        });
+        store.refreshState();
+        expect(queryParamsSerialized[queryParamsSerialized.length - 1]).toEqual(
+          [{key: 'runColorGroup', value: 'regex_by_exp:exp_name'}]
+        );
       });
 
       it('serializes interesting regex strings', () => {
@@ -427,6 +495,24 @@ describe('core deeplink provider', () => {
         store.refreshState();
         expect(queryParamsSerialized[queryParamsSerialized.length - 1]).toEqual(
           [{key: 'runColorGroup', value: 'regex:hello/(world):goodbye'}]
+        );
+
+        store.overrideSelector(selectors.getRunUserSetGroupBy, {
+          key: GroupByKey.REGEX_BY_EXP,
+          regexString: '',
+        });
+        store.refreshState();
+        expect(queryParamsSerialized[queryParamsSerialized.length - 1]).toEqual(
+          [{key: 'runColorGroup', value: 'regex_by_exp:'}]
+        );
+
+        store.overrideSelector(selectors.getRunUserSetGroupBy, {
+          key: GroupByKey.REGEX_BY_EXP,
+          regexString: 'one|two',
+        });
+        store.refreshState();
+        expect(queryParamsSerialized[queryParamsSerialized.length - 1]).toEqual(
+          [{key: 'runColorGroup', value: 'regex_by_exp:one|two'}]
         );
       });
     });

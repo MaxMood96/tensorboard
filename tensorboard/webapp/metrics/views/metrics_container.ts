@@ -13,16 +13,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 import {ChangeDetectionStrategy, Component} from '@angular/core';
+import {Store} from '@ngrx/store';
+import {State} from '../../app_state';
+import {getRunsTableFullScreen} from '../../core/store/core_selectors';
 
 @Component({
+  standalone: false,
   selector: 'metrics-dashboard',
   template: `
     <tb-dashboard-layout>
       <runs-selector sidebar></runs-selector>
-      <metrics-main-view main></metrics-main-view>
+      <metrics-main-view
+        main
+        *ngIf="!(runsTableFullScreen$ | async)"
+      ></metrics-main-view>
     </tb-dashboard-layout>
   `,
   styleUrls: ['metrics_container.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MetricsDashboardContainer {}
+export class MetricsDashboardContainer {
+  runsTableFullScreen$;
+
+  constructor(readonly store: Store<State>) {
+    this.runsTableFullScreen$ = this.store.select(getRunsTableFullScreen);
+  }
+}

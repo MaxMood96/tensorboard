@@ -27,21 +27,22 @@ import {
   TagMetadata as DataSourceTagMetadata,
   TimeSeriesRequest,
   TimeSeriesResponse,
+  SavedPinsDataSource,
+  Tag,
 } from './data_source';
+import * as selectors from './store/metrics_selectors';
 import {
   MetricsState,
   METRICS_FEATURE_KEY,
   TagMetadata,
   TimeSeriesData,
-} from './store';
-import * as selectors from './store/metrics_selectors';
-import {
   CardStepIndexMetaData,
   MetricsSettings,
   RunToSeries,
   StepDatum,
 } from './store/metrics_types';
 import {CardId, CardMetadata, TooltipSort, XAxisType} from './types';
+import {DataTableMode} from '../widgets/data_table/types';
 
 export function buildMetricsSettingsState(
   overrides?: Partial<MetricsSettings>
@@ -52,6 +53,29 @@ export function buildMetricsSettingsState(
     ignoreOutliers: false,
     xAxisType: XAxisType.WALL_TIME,
     scalarSmoothing: 0.3,
+    hideEmptyCards: true,
+    scalarPartitionNonMonotonicX: false,
+    imageBrightnessInMilli: 123,
+    imageContrastInMilli: 123,
+    imageShowActualSize: true,
+    histogramMode: HistogramMode.OFFSET,
+    savingPinsEnabled: true,
+    ...overrides,
+  };
+}
+
+// Since Settings proto has missing fields, we need to build a partial of
+// Settings to be used in tests.
+export function buildMetricsSettingsOverrides(
+  overrides?: Partial<MetricsSettings>
+): Partial<MetricsSettings> {
+  return {
+    cardMinWidth: null,
+    tooltipSort: TooltipSort.NEAREST,
+    ignoreOutliers: false,
+    xAxisType: XAxisType.WALL_TIME,
+    scalarSmoothing: 0.3,
+    hideEmptyCards: true,
     scalarPartitionNonMonotonicX: false,
     imageBrightnessInMilli: 123,
     imageContrastInMilli: 123,
@@ -93,6 +117,7 @@ function buildBlankState(): MetricsState {
     cardToPinnedCopyCache: new Map(),
     pinnedCardToOriginal: new Map(),
     unresolvedImportedPinnedCards: [],
+    lastPinnedCardTime: 0,
     cardMetadataMap: {},
     cardStateMap: {},
     cardStepIndex: {},
@@ -109,6 +134,17 @@ function buildBlankState(): MetricsState {
     stepMinMax: {min: Infinity, max: -Infinity},
     isSettingsPaneOpen: false,
     isSlideoutMenuOpen: false,
+    tableEditorSelectedTab: DataTableMode.SINGLE,
+    previousCardInteractions: {
+      tagFilters: [],
+      pins: [],
+      clicks: [],
+    },
+    newCardInteractions: {
+      tagFilters: [],
+      pins: [],
+      clicks: [],
+    },
   };
 }
 
@@ -380,4 +416,26 @@ export function buildStepIndexMetadata(
     isClosest: false,
     ...override,
   };
+}
+
+@Injectable()
+export class TestingSavedPinsDataSource {
+  saveScalarPin(tag: Tag) {}
+
+  saveScalarPins(tag: Tag[]) {}
+
+  removeScalarPin(tag: Tag) {}
+
+  getSavedScalarPins() {
+    return [];
+  }
+
+  removeAllScalarPins() {}
+}
+
+export function provideTestingSavedPinsDataSource() {
+  return [
+    TestingSavedPinsDataSource,
+    {provide: SavedPinsDataSource, useExisting: TestingSavedPinsDataSource},
+  ];
 }

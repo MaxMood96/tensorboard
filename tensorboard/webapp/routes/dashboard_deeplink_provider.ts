@@ -15,7 +15,7 @@ limitations under the License.
 import {Injectable} from '@angular/core';
 import {Store} from '@ngrx/store';
 import {combineLatest, Observable} from 'rxjs';
-import {map} from 'rxjs/operators';
+import {combineLatestWith, map} from 'rxjs/operators';
 import {DeepLinkProvider} from '../app_routing/deep_link_provider';
 import {SerializableQueryParams} from '../app_routing/types';
 import {State} from '../app_state';
@@ -42,6 +42,7 @@ import {
 import {featureFlagsToSerializableQueryParams} from './feature_flag_serializer';
 
 const COLOR_GROUP_REGEX_VALUE_PREFIX = 'regex:';
+const COLOR_GROUP_REGEX_BY_EXP_VALUE_PREFIX = 'regex_by_exp:';
 
 /**
  * Provides deeplinking for the core dashboards page.
@@ -135,6 +136,9 @@ export class DashboardDeepLinkProvider extends DeepLinkProvider {
             case GroupByKey.REGEX:
               value = `${COLOR_GROUP_REGEX_VALUE_PREFIX}${groupBy.regexString}`;
               break;
+            case GroupByKey.REGEX_BY_EXP:
+              value = `${COLOR_GROUP_REGEX_BY_EXP_VALUE_PREFIX}${groupBy.regexString}`;
+              break;
             default:
               throw new RangeError(`Serialization not implemented`);
           }
@@ -149,8 +153,17 @@ export class DashboardDeepLinkProvider extends DeepLinkProvider {
         })
       ),
     ]).pipe(
-      map((queryParamList) => {
-        return queryParamList.flat();
+      combineLatestWith(store.select(selectors.getUnknownQueryParams)),
+      map(([queryParamList, unknownQueryParams]) => {
+        // Filter out any known params from unknownQueryParams.
+        const knownQueryParamKeys = new Set(
+          queryParamList.flat().map((qp) => qp.key)
+        );
+        const filteredUnknownQueryParams = Object.entries(unknownQueryParams)
+          .filter(([key]) => !knownQueryParamKeys.has(key))
+          .map(([key, value]) => ({key, value}));
+
+        return [...queryParamList, ...filteredUnknownQueryParams].flat();
       })
     );
   }
@@ -163,6 +176,7 @@ export class DashboardDeepLinkProvider extends DeepLinkProvider {
     let tagFilter = null;
     let groupBy: GroupBy | null = null;
     let runFilter = null;
+    const unknownQueryParams: Record<string, string> = {};
 
     for (const {key, value} of queryParams) {
       switch (key) {
@@ -188,6 +202,12 @@ export class DashboardDeepLinkProvider extends DeepLinkProvider {
             );
             groupBy = {key: GroupByKey.REGEX, regexString};
           }
+          if (value.startsWith(COLOR_GROUP_REGEX_BY_EXP_VALUE_PREFIX)) {
+            const regexString = value.slice(
+              COLOR_GROUP_REGEX_BY_EXP_VALUE_PREFIX.length
+            );
+            groupBy = {key: GroupByKey.REGEX_BY_EXP, regexString};
+          }
           break;
         }
         case TAG_FILTER_KEY:
@@ -196,10 +216,14 @@ export class DashboardDeepLinkProvider extends DeepLinkProvider {
         case RUN_FILTER_KEY:
           runFilter = value;
           break;
+        default:
+          unknownQueryParams[key] = value;
+          break;
       }
     }
 
     return {
+      unknownQueryParams,
       metrics: {
         pinnedCards: pinnedCards || [],
         smoothing,

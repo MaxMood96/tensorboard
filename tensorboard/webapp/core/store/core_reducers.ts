@@ -13,12 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 import {Action, createReducer, on} from '@ngrx/store';
+import {stateRehydratedFromUrl} from '../../app_routing/actions/app_routing_actions';
 import {createNamespaceContextedState} from '../../app_routing/namespaced_state_reducer_helper';
-import {globalSettingsLoaded} from '../../persistent_settings';
+import {persistentSettingsLoaded} from '../../persistent_settings';
 import {DataLoadState} from '../../types/data';
 import {composeReducers} from '../../util/ngrx';
 import * as actions from '../actions';
 import {CoreState, initialState} from './core_types';
+import {URLDeserializedState} from '../types';
 
 const reducer = createReducer(
   initialState,
@@ -154,7 +156,7 @@ const reducer = createReducer(
       sideBarWidthInPercent: Math.min(Math.max(0, widthInPercent), 100),
     };
   }),
-  on(globalSettingsLoaded, (state, {partialSettings}) => {
+  on(persistentSettingsLoaded, (state, {partialSettings}) => {
     const nextState = {...state};
 
     const sideBarWidthInPercent = partialSettings.sideBarWidthInPercent;
@@ -167,6 +169,19 @@ const reducer = createReducer(
     }
 
     return nextState;
+  }),
+  on(actions.runsTableFullScreenToggled, (state) => {
+    return {
+      ...state,
+      runsTableFullScreen: !state.runsTableFullScreen,
+    };
+  }),
+  on(stateRehydratedFromUrl, (state, {partialState}) => {
+    const {unknownQueryParams = {}} = partialState as URLDeserializedState;
+    return {
+      ...state,
+      unknownQueryParams,
+    };
   })
 );
 

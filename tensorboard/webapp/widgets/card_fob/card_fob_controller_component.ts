@@ -43,6 +43,7 @@ const TIME_SELECTION_TO_FOB: Record<keyof TimeSelection, Fob> = {
 };
 
 @Component({
+  standalone: false,
   selector: 'card-fob-controller',
   templateUrl: 'card_fob_controller_component.ng.html',
   styleUrls: ['card_fob_controller_component.css'],
@@ -61,9 +62,9 @@ export class CardFobControllerComponent {
   @Input() highestStep!: number;
   @Input() lowestStep!: number;
   @Input() showExtendedLine?: Boolean = false;
-  @Input() isProspectiveFobFeatureEnabled?: Boolean = false;
   @Input() prospectiveStep: number | null = null;
   @Input() prospectiveStepAxisPosition?: number | null = null;
+  @Input() allowFobRemoval?: boolean = true;
 
   @Output() onTimeSelectionChanged =
     new EventEmitter<TimeSelectionWithAffordance>();

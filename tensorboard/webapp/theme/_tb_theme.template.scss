@@ -262,9 +262,14 @@ $tb-dark-theme: map_merge(
 
 // Apply themed style for the global stylesheet (styles.scss).
 @mixin tb-global-themed-styles() {
+  // TODO(JamesHollyer): remove legacy component themes once all components
+  // are migrated.
   @include mat.core();
+  @include mat.all-legacy-component-typographies();
   @include mat.all-component-typographies();
   // Include all theme-styles for the components based on the current theme.
+  @include mat.all-component-themes($tb-theme);
+  @include mat.all-legacy-component-themes($tb-theme);
   @include mat.all-component-themes($tb-theme);
 
   body {
@@ -275,14 +280,68 @@ $tb-dark-theme: map_merge(
   // Prevent color-picker from briefly showing scrollbar when calculating its
   // position.
   .cdk-overlay-container {
+    // Prevent color-picker from briefly showing scrollbar when calculating its
+    // position.
     contain: strict;
+    // The old dialog had a default 24px padding. When migrating to the
+    // new dialog this padding was added to avoid adding it to them all
+    // individually.
+    .mat-mdc-dialog-surface {
+      padding: 16px;
+    }
   }
 
-  a:not(.mat-button, .mat-icon-button) {
+  a:not(.mdc-button, .mdc-icon-button) {
     color: map-get($tb-foreground, link);
 
     &:visited {
       color: map-get($tb-foreground, link-visited);
+    }
+  }
+
+  body,
+  body.dark-mode {
+    mat-slider {
+      --mdc-slider-handle-width: 12px;
+      --mdc-slider-handle-height: 12px;
+      --mdc-slider-active-track-height: 2px;
+      --mdc-slider-inactive-track-height: 2px;
+    }
+
+    a,
+    button.mat-mdc-button-base {
+      --tb-icon-width: 24px;
+      --tb-icon-height: 24px;
+      --tb-icon-button-width: 40px;
+      --tb-icon-button-height: 40px;
+      --mdc-text-button-label-text-tracking: normal;
+      --mdc-filled-button-label-text-tracking: normal;
+      --mdc-outlined-button-label-text-tracking: normal;
+      --mdc-protected-button-label-text-tracking: normal;
+
+      &[mat-icon-button].mat-mdc-icon-button {
+        width: var(--tb-icon-button-width);
+        height: var(--tb-icon-button-height);
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+
+        .mat-mdc-button-touch-target {
+          height: 100%;
+          width: 100%;
+        }
+      }
+
+      mat-icon.mat-icon {
+        flex-shrink: 0;
+      }
+
+      mat-icon.mat-icon,
+      svg {
+        width: var(--tb-icon-size, var(--tb-icon-width));
+        height: var(--tb-icon-size, var(--tb-icon-height));
+        line-height: var(--tb-icon-size, var(--tb-icon-height));
+      }
     }
   }
 
@@ -291,7 +350,7 @@ $tb-dark-theme: map_merge(
   body.dark-mode {
     background-color: map-get($tb-dark-background, background);
 
-    a:not(.mat-button, .mat-icon-button) {
+    a:not(.mdc-button, .mdc-icon-button) {
       color: map-get($tb-dark-foreground, link);
 
       &:visited {
@@ -299,6 +358,9 @@ $tb-dark-theme: map_merge(
       }
     }
 
+    // TODO(JamesHollyer): remove legacy component themes once all components
+    // are migrated.
     @include mat.all-component-themes($tb-dark-theme);
+    @include mat.all-legacy-component-themes($tb-dark-theme);
   }
 }
