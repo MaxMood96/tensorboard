@@ -23,10 +23,13 @@ import {
   buildNavigatedAction,
   buildRoute,
 } from '../../app_routing/testing';
+import {RouteKind} from '../../app_routing/types';
 import {State} from '../../app_state';
 import * as coreActions from '../../core/actions';
+import * as hparamsActions from '../../hparams/_redux/hparams_actions';
 import {
   getActiveRoute,
+  getDashboardExperimentNames,
   getExperimentIdsFromRoute,
   getRuns,
   getRunsLoadState,
@@ -34,13 +37,13 @@ import {
 import {provideMockTbStore} from '../../testing/utils';
 import {DataLoadState} from '../../types/data';
 import * as actions from '../actions';
-import {HparamsAndMetadata, Run} from '../data_source/runs_data_source_types';
+import {Run} from '../data_source/runs_data_source_types';
 import {
-  buildHparamsAndMetadata,
   provideTestingRunsDataSource,
   TestingRunsDataSource,
 } from '../data_source/testing';
 import {RunsEffects} from './index';
+import {ColumnHeaderType} from '../../widgets/data_table/types';
 
 function createRun(override: Partial<Run> = {}) {
   return {
@@ -57,8 +60,6 @@ describe('runs_effects', () => {
   let store: MockStore<State>;
   let action: ReplaySubject<Action>;
   let fetchRunsSubjects: Array<ReplaySubject<Run[]>>;
-  let fetchHparamsMetadataSubjects: Array<ReplaySubject<HparamsAndMetadata>>;
-  let dispatchSpy: jasmine.Spy;
   let actualActions: Action[];
   let selectSpy: jasmine.Spy;
 
@@ -72,15 +73,6 @@ describe('runs_effects', () => {
     expect(fetchRunsSubjects.length).toBeGreaterThan(requestIndex);
     fetchRunsSubjects[requestIndex].error(new ErrorEvent('error'));
     fetchRunsSubjects[requestIndex].complete();
-  }
-
-  function flushFetchHparamsMetadata(
-    requestIndex: number,
-    metadata: HparamsAndMetadata
-  ) {
-    expect(fetchHparamsMetadataSubjects.length).toBeGreaterThan(requestIndex);
-    fetchHparamsMetadataSubjects[requestIndex].next(metadata);
-    fetchHparamsMetadataSubjects[requestIndex].complete();
   }
 
   beforeEach(async () => {
@@ -99,7 +91,7 @@ describe('runs_effects', () => {
     selectSpy = spyOn(store, 'select').and.callThrough();
 
     actualActions = [];
-    dispatchSpy = spyOn(store, 'dispatch').and.callFake((action: Action) => {
+    spyOn(store, 'dispatch').and.callFake((action: Action) => {
       actualActions.push(action);
     });
     effects = TestBed.inject(RunsEffects);
@@ -108,13 +100,6 @@ describe('runs_effects', () => {
     spyOn(runsDataSource, 'fetchRuns').and.callFake(() => {
       const subject = new ReplaySubject<Run[]>(1);
       fetchRunsSubjects.push(subject);
-      return subject;
-    });
-
-    fetchHparamsMetadataSubjects = [];
-    spyOn(runsDataSource, 'fetchHparamsMetadata').and.callFake(() => {
-      const subject = new ReplaySubject<HparamsAndMetadata>(1);
-      fetchHparamsMetadataSubjects.push(subject);
       return subject;
     });
 
@@ -130,206 +115,6 @@ describe('runs_effects', () => {
     store?.resetSelectors();
   });
 
-  describe('loadRunsOnRunTableShown', () => {
-    beforeEach(() => {
-      // Subscribes to effects.loadRunsOnRunTableShown$ change. Must subscribe
-      // after settings the action payload before.
-      effects.loadRunsOnRunTableShown$.subscribe(() => {});
-    });
-
-    [
-      {
-        runLoadState: DataLoadState.NOT_LOADED,
-      },
-      {
-        runLoadState: DataLoadState.FAILED,
-      },
-    ].forEach(({runLoadState}) => {
-      it(
-        'fetches runs and hparams when runLoadState is ' +
-          DataLoadState[runLoadState],
-        () => {
-          store.overrideSelector(getRunsLoadState, {
-            state: runLoadState,
-            lastLoadedTimeInMs: 0,
-          });
-          // Force store to emit change and make selector to fetch the latest
-          // data.
-          store.refreshState();
-
-          action.next(actions.runTableShown({experimentIds: ['a']}));
-          const createRuns = () => [
-            createRun({
-              id: 'a/runA',
-              name: 'runA',
-            }),
-            createRun({
-              id: 'a/runA/runB',
-              name: 'runA/runB',
-            }),
-          ];
-          flushFetchRuns(0, createRuns());
-          flushFetchHparamsMetadata(
-            0,
-            buildHparamsAndMetadata({
-              runToHparamsAndMetrics: {
-                'a/runA': {hparams: [{name: 'param', value: 1}], metrics: []},
-              },
-            })
-          );
-
-          const expectedExperimentId = 'a';
-
-          expect(actualActions).toEqual([
-            actions.fetchRunsRequested({
-              experimentIds: [expectedExperimentId],
-              requestedExperimentIds: [expectedExperimentId],
-            }),
-            actions.fetchRunsSucceeded({
-              experimentIds: ['a'],
-              runsForAllExperiments: createRuns(),
-              newRunsAndMetadata: {
-                [expectedExperimentId]: {
-                  runs: createRuns(),
-                  metadata: buildHparamsAndMetadata({
-                    runToHparamsAndMetrics: {
-                      'a/runA': {
-                        hparams: [{name: 'param', value: 1}],
-                        metrics: [],
-                      },
-                    },
-                  }),
-                },
-              },
-            }),
-          ]);
-        }
-      );
-    });
-
-    [
-      {
-        runLoadState: DataLoadState.LOADED,
-      },
-      {
-        runLoadState: DataLoadState.LOADING,
-      },
-    ].forEach(({runLoadState}) => {
-      it(`does not fetch runs when runLoadState is ${DataLoadState[runLoadState]}`, () => {
-        store.overrideSelector(getRunsLoadState, {
-          state: runLoadState,
-          lastLoadedTimeInMs: 0,
-        });
-        store.refreshState();
-
-        action.next(actions.runTableShown({experimentIds: ['a']}));
-
-        expect(fetchRunsSubjects.length).toBe(0);
-
-        expect(actualActions).toEqual([]);
-      });
-    });
-
-    it('fires FAILED action when failed to fetch runs', () => {
-      action.next(actions.runTableShown({experimentIds: ['a']}));
-      const expectedExperimentId = 'a';
-
-      expect(fetchRunsSubjects.length).toBe(1);
-      flushRunsError(0);
-
-      expect(actualActions).toEqual([
-        actions.fetchRunsRequested({
-          experimentIds: [expectedExperimentId],
-          requestedExperimentIds: [expectedExperimentId],
-        }),
-        actions.fetchRunsFailed({
-          experimentIds: [expectedExperimentId],
-          requestedExperimentIds: [expectedExperimentId],
-        }),
-      ]);
-    });
-
-    it('fires FAILED action when failed to fetch hparams', () => {
-      action.next(actions.runTableShown({experimentIds: ['a']}));
-      const expectedExperimentId = 'a';
-
-      fetchHparamsMetadataSubjects[0].error(new ErrorEvent('error'));
-      fetchHparamsMetadataSubjects[0].complete();
-
-      expect(actualActions).toEqual([
-        actions.fetchRunsRequested({
-          experimentIds: [expectedExperimentId],
-          requestedExperimentIds: [expectedExperimentId],
-        }),
-        actions.fetchRunsFailed({
-          experimentIds: [expectedExperimentId],
-          requestedExperimentIds: [expectedExperimentId],
-        }),
-      ]);
-    });
-
-    it('allows concurrent requests that arrive out of order', () => {
-      const firstExperimentId = 'a';
-      const secondExperimentId = 'b';
-
-      action.next(actions.runTableShown({experimentIds: [firstExperimentId]}));
-      action.next(actions.runTableShown({experimentIds: [secondExperimentId]}));
-
-      // fetchRuns are still pending.
-      expect(actualActions).toEqual([
-        actions.fetchRunsRequested({
-          experimentIds: [firstExperimentId],
-          requestedExperimentIds: [firstExperimentId],
-        }),
-        actions.fetchRunsRequested({
-          experimentIds: [secondExperimentId],
-          requestedExperimentIds: [secondExperimentId],
-        }),
-      ]);
-
-      const RUN_A = createRun({id: '0', name: 'runA'});
-      const RUN_B = createRun({id: '1', name: 'runB'});
-      const RUN_B_1 = createRun({id: '2', name: 'runB/1'});
-      // fetchRuns arrived out of order.
-      expect(fetchRunsSubjects.length).toBe(2);
-      flushFetchRuns(1, [RUN_B, RUN_B_1]);
-      flushFetchHparamsMetadata(1, buildHparamsAndMetadata({}));
-      flushFetchRuns(0, [RUN_A]);
-      flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
-
-      expect(actualActions).toEqual([
-        actions.fetchRunsRequested({
-          experimentIds: [firstExperimentId],
-          requestedExperimentIds: [firstExperimentId],
-        }),
-        actions.fetchRunsRequested({
-          experimentIds: [secondExperimentId],
-          requestedExperimentIds: [secondExperimentId],
-        }),
-        actions.fetchRunsSucceeded({
-          experimentIds: ['b'],
-          runsForAllExperiments: [RUN_B, RUN_B_1],
-          newRunsAndMetadata: {
-            [secondExperimentId]: {
-              runs: [RUN_B, RUN_B_1],
-              metadata: buildHparamsAndMetadata({}),
-            },
-          },
-        }),
-        actions.fetchRunsSucceeded({
-          experimentIds: ['a'],
-          runsForAllExperiments: [RUN_A],
-          newRunsAndMetadata: {
-            [firstExperimentId]: {
-              runs: [RUN_A],
-              metadata: buildHparamsAndMetadata({}),
-            },
-          },
-        }),
-      ]);
-    });
-  });
-
   describe('loadRunsOnNavigationOrReload', () => {
     beforeEach(() => {
       effects.loadRunsOnNavigationOrReload$.subscribe(() => {});
@@ -341,12 +126,16 @@ describe('runs_effects', () => {
       {specAction: coreActions.reload, specName: 'auto reload'},
     ].forEach(({specAction, specName}) => {
       describe(`on ${specName}`, () => {
-        it(`fetches runs and hparams based on expIds in the route`, () => {
+        it(`fetches runs based on expIds in the route`, () => {
           store.overrideSelector(
             getActiveRoute,
             buildCompareRoute(['exp1:123', 'exp2:456'])
           );
           store.overrideSelector(getExperimentIdsFromRoute, ['123', '456']);
+          store.overrideSelector(getDashboardExperimentNames, {
+            456: 'exp2',
+            123: 'exp1',
+          });
           const createFooRuns = () => [
             createRun({
               id: 'foo/runA',
@@ -364,9 +153,7 @@ describe('runs_effects', () => {
           action.next(specAction());
           // Flush second request first to spice things up.
           flushFetchRuns(1, createBarRuns());
-          flushFetchHparamsMetadata(1, buildHparamsAndMetadata({}));
           flushFetchRuns(0, createFooRuns());
-          flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
 
           expect(actualActions).toEqual([
             actions.fetchRunsRequested({
@@ -376,15 +163,17 @@ describe('runs_effects', () => {
             actions.fetchRunsSucceeded({
               experimentIds: ['123', '456'],
               runsForAllExperiments: [...createFooRuns(), ...createBarRuns()],
-              newRunsAndMetadata: {
+              newRuns: {
                 456: {
                   runs: createBarRuns(),
-                  metadata: buildHparamsAndMetadata({}),
                 },
                 123: {
                   runs: createFooRuns(),
-                  metadata: buildHparamsAndMetadata({}),
                 },
+              },
+              expNameByExpId: {
+                456: 'exp2',
+                123: 'exp1',
               },
             }),
           ]);
@@ -431,11 +220,14 @@ describe('runs_effects', () => {
             buildCompareRoute(['exp1:123', ' exp2:456'])
           );
           store.overrideSelector(getExperimentIdsFromRoute, ['123', '456']);
+          store.overrideSelector(getDashboardExperimentNames, {
+            456: 'exp2',
+            123: 'exp1',
+          });
           store.refreshState();
 
           action.next(specAction());
           flushFetchRuns(0, createBarRuns());
-          flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
 
           expect(actualActions).toEqual([
             actions.fetchRunsRequested({
@@ -460,15 +252,36 @@ describe('runs_effects', () => {
             actions.fetchRunsSucceeded({
               experimentIds: ['123', '456'],
               runsForAllExperiments: [...createFooRuns(), ...createBarRuns()],
-              newRunsAndMetadata: {
+              newRuns: {
                 456: {
                   runs: createBarRuns(),
-                  metadata: buildHparamsAndMetadata({}),
                 },
+              },
+              expNameByExpId: {
+                456: 'exp2',
+                123: 'exp1',
               },
             }),
           ]);
         });
+      });
+    });
+
+    [
+      {specAction: buildNavigatedAction, specName: 'navigation'},
+      {specAction: coreActions.manualReload, specName: 'manual reload'},
+      {specAction: coreActions.reload, specName: 'auto reload'},
+    ].forEach(({specAction, specName}) => {
+      it(`does not fetch runs on card route when action is ${specName}`, () => {
+        store.overrideSelector(getActiveRoute, {
+          routeKind: RouteKind.CARD,
+          params: {},
+        });
+        store.refreshState();
+
+        action.next(specAction());
+
+        expect(actualActions).toEqual([]);
       });
     });
 
@@ -514,11 +327,14 @@ describe('runs_effects', () => {
           buildCompareRoute(['exp1:123', ' exp2:456'])
         );
         store.overrideSelector(getExperimentIdsFromRoute, ['123', '456']);
+        store.overrideSelector(getDashboardExperimentNames, {
+          456: 'exp1',
+          123: 'exp2',
+        });
         store.refreshState();
 
         action.next(buildNavigatedAction());
         flushFetchRuns(0, createBarRuns());
-        flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
 
         expect(actualActions).toEqual([
           actions.fetchRunsRequested({
@@ -528,11 +344,14 @@ describe('runs_effects', () => {
           actions.fetchRunsSucceeded({
             experimentIds: ['123', '456'],
             runsForAllExperiments: [...createFooRuns(), ...createBarRuns()],
-            newRunsAndMetadata: {
+            newRuns: {
               456: {
                 runs: createBarRuns(),
-                metadata: buildHparamsAndMetadata({}),
               },
+            },
+            expNameByExpId: {
+              456: 'exp1',
+              123: 'exp2',
             },
           }),
         ]);
@@ -541,6 +360,7 @@ describe('runs_effects', () => {
       it('ignores a navigation to same route and experiments (hash changes)', () => {
         store.overrideSelector(getActiveRoute, buildRoute());
         store.overrideSelector(getExperimentIdsFromRoute, ['123']);
+        store.overrideSelector(getDashboardExperimentNames, {123: 'exp1'});
         const createFooRuns = () => [
           createRun({
             id: 'foo/runA',
@@ -568,7 +388,8 @@ describe('runs_effects', () => {
           actions.fetchRunsSucceeded({
             experimentIds: ['123'],
             runsForAllExperiments: [...createFooRuns()],
-            newRunsAndMetadata: {},
+            newRuns: {},
+            expNameByExpId: {123: 'exp1'},
           }),
         ]);
 
@@ -597,6 +418,7 @@ describe('runs_effects', () => {
             })
           );
         store.overrideSelector(getExperimentIdsFromRoute, ['foo']);
+        store.overrideSelector(getDashboardExperimentNames, {foo: 'exp1'});
         store.refreshState();
 
         action.next(buildNavigatedAction());
@@ -609,7 +431,8 @@ describe('runs_effects', () => {
           actions.fetchRunsSucceeded({
             experimentIds: ['foo'],
             runsForAllExperiments: [...createFooRuns()],
-            newRunsAndMetadata: {},
+            newRuns: {},
+            expNameByExpId: {foo: 'exp1'},
           }),
         ]);
       });
@@ -627,8 +450,6 @@ describe('runs_effects', () => {
 
       flushRunsError(0);
       flushFetchRuns(1, [createRun({id: 'bar/runB', name: 'runB'})]);
-      flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
-      flushFetchHparamsMetadata(1, buildHparamsAndMetadata({}));
 
       expect(actualActions).toEqual([
         actions.fetchRunsRequested({
@@ -665,15 +486,17 @@ describe('runs_effects', () => {
       // Emulate navigation to a new experiment route.
       store.overrideSelector(getActiveRoute, buildExperimentRouteFromId('456'));
       store.overrideSelector(getExperimentIdsFromRoute, ['456']);
+      store.overrideSelector(getDashboardExperimentNames, {
+        456: 'exp1',
+        123: 'exp2',
+      });
       // Force selectors to re-evaluate with a change in store.
       store.refreshState();
 
       action.next(buildNavigatedAction());
 
       flushFetchRuns(1, createBarRuns());
-      flushFetchHparamsMetadata(1, buildHparamsAndMetadata({}));
       flushFetchRuns(0, createFooRuns());
-      flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
 
       expect(actualActions).toEqual([
         actions.fetchRunsRequested({
@@ -687,16 +510,18 @@ describe('runs_effects', () => {
         actions.fetchRunsSucceeded({
           experimentIds: ['456'],
           runsForAllExperiments: createBarRuns(),
-          newRunsAndMetadata: {
-            456: {runs: createBarRuns(), metadata: buildHparamsAndMetadata({})},
+          newRuns: {
+            456: {runs: createBarRuns()},
           },
+          expNameByExpId: {456: 'exp1', 123: 'exp2'},
         }),
         actions.fetchRunsSucceeded({
           experimentIds: ['123'],
           runsForAllExperiments: createFooRuns(),
-          newRunsAndMetadata: {
-            123: {runs: createFooRuns(), metadata: buildHparamsAndMetadata({})},
+          newRuns: {
+            123: {runs: createFooRuns()},
           },
+          expNameByExpId: {456: 'exp1', 123: 'exp2'},
         }),
       ]);
     });
@@ -712,37 +537,7 @@ describe('runs_effects', () => {
       action.next(buildNavigatedAction());
 
       flushRunsError(0);
-      flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
       flushFetchRuns(1, []);
-      flushFetchHparamsMetadata(1, buildHparamsAndMetadata({}));
-
-      expect(actualActions).toEqual([
-        actions.fetchRunsRequested({
-          experimentIds: ['123', '456'],
-          requestedExperimentIds: ['123', '456'],
-        }),
-        actions.fetchRunsFailed({
-          experimentIds: ['123', '456'],
-          requestedExperimentIds: ['123', '456'],
-        }),
-      ]);
-    });
-
-    it('fires FAILED action when at least one hparams fetch failed', () => {
-      store.overrideSelector(
-        getActiveRoute,
-        buildCompareRoute(['exp1:123', 'exp2:456'])
-      );
-      store.overrideSelector(getExperimentIdsFromRoute, ['123', '456']);
-      store.refreshState();
-
-      action.next(buildNavigatedAction());
-
-      flushFetchRuns(0, [createRun({id: 'foo/runA', name: 'runA'})]);
-      fetchHparamsMetadataSubjects[0].error(new ErrorEvent('error'));
-      fetchHparamsMetadataSubjects[0].complete();
-      flushFetchRuns(1, []);
-      flushFetchHparamsMetadata(1, buildHparamsAndMetadata({}));
 
       expect(actualActions).toEqual([
         actions.fetchRunsRequested({
@@ -792,6 +587,10 @@ describe('runs_effects', () => {
         });
 
         store.overrideSelector(getExperimentIdsFromRoute, ['foo']);
+        store.overrideSelector(getDashboardExperimentNames, {
+          foo: 'exp1',
+          bar: 'exp2',
+        });
         selectSpy
           .withArgs(getRuns, {experimentId: 'foo'})
           .and.returnValue(runsSubject);
@@ -825,11 +624,9 @@ describe('runs_effects', () => {
 
         // Flush the request for `bar`'s runs.
         flushFetchRuns(1, createBarRuns());
-        flushFetchHparamsMetadata(1, buildHparamsAndMetadata({}));
 
         // Flush the request for `foo`'s runs.
         flushFetchRuns(0, createFooAfterRuns());
-        flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
         runsSubject.next(createFooAfterRuns());
         runsLoadStateSubject.next({
           state: DataLoadState.LOADED,
@@ -848,12 +645,12 @@ describe('runs_effects', () => {
           actions.fetchRunsSucceeded({
             experimentIds: ['foo'],
             runsForAllExperiments: [...createFooAfterRuns()],
-            newRunsAndMetadata: {
+            newRuns: {
               foo: {
                 runs: createFooAfterRuns(),
-                metadata: buildHparamsAndMetadata({}),
               },
             },
+            expNameByExpId: {foo: 'exp1', bar: 'exp2'},
           }),
           actions.fetchRunsSucceeded({
             experimentIds: ['foo', 'bar'],
@@ -861,12 +658,12 @@ describe('runs_effects', () => {
               ...createFooAfterRuns(),
               ...createBarRuns(),
             ],
-            newRunsAndMetadata: {
+            newRuns: {
               bar: {
                 runs: createBarRuns(),
-                metadata: buildHparamsAndMetadata({}),
               },
             },
+            expNameByExpId: {foo: 'exp1', bar: 'exp2'},
           }),
         ]);
       });
@@ -901,7 +698,6 @@ describe('runs_effects', () => {
         action.next(coreActions.manualReload());
 
         flushRunsError(0);
-        flushFetchHparamsMetadata(0, buildHparamsAndMetadata({}));
         runsLoadStateSubject.next({
           state: DataLoadState.FAILED,
           lastLoadedTimeInMs: 0,
@@ -926,6 +722,52 @@ describe('runs_effects', () => {
           }),
         ]);
       });
+    });
+  });
+
+  describe('removeHparamFilterWhenColumnIsRemoved$', () => {
+    beforeEach(() => {
+      effects.removeHparamFilterWhenColumnIsRemoved$.subscribe(() => {});
+    });
+
+    it('dispatches dashboardHparamFilterRemoved when column type is hparam', () => {
+      action.next(
+        actions.runsTableHeaderRemoved({
+          header: {
+            type: ColumnHeaderType.HPARAM,
+            name: 'some_hparam',
+            enabled: true,
+            displayName: 'Some Hparam',
+          },
+        })
+      );
+      store.refreshState();
+
+      expect(actualActions).toEqual([
+        hparamsActions.dashboardHparamFilterRemoved({
+          name: 'some_hparam',
+        }),
+      ]);
+    });
+
+    it('dispatches dashboardMetricFilterRemoved when column type is metric', () => {
+      action.next(
+        actions.runsTableHeaderRemoved({
+          header: {
+            type: ColumnHeaderType.METRIC,
+            name: 'some_metric',
+            enabled: true,
+            displayName: 'Some Metric',
+          },
+        })
+      );
+      store.refreshState();
+
+      expect(actualActions).toEqual([
+        hparamsActions.dashboardMetricFilterRemoved({
+          name: 'some_metric',
+        }),
+      ]);
     });
   });
 });

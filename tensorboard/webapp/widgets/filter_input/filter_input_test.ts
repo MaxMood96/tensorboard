@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 import {OverlayContainer} from '@angular/cdk/overlay';
 import {Component, Input} from '@angular/core';
-import {TestBed} from '@angular/core/testing';
+import {TestBed, fakeAsync, tick} from '@angular/core/testing';
 import {MatAutocompleteModule} from '@angular/material/autocomplete';
 import {By} from '@angular/platform-browser';
 import {NoopAnimationsModule} from '@angular/platform-browser/animations';
@@ -24,6 +24,7 @@ import {MatIconTestingModule} from '../../testing/mat_icon_module';
 import {FilterInputModule} from './filter_input_module';
 
 @Component({
+  standalone: false,
   selector: 'test',
   template: `
     <tb-filter-input [value]="value" [matAutocomplete]="filterMatches">
@@ -45,6 +46,7 @@ class TestableInputWithCompletions {
 }
 
 @Component({
+  standalone: false,
   selector: 'test',
   template: ` <tb-filter-input></tb-filter-input> `,
 })
@@ -98,7 +100,7 @@ describe('filter input widget', () => {
     expect(isAutocompleteDisabled || !hasAutocomplete).toBe(true);
   });
 
-  it('shows autocomplete and closes on Enter', () => {
+  it('shows autocomplete and closes on Enter', fakeAsync(() => {
     const fixture = TestBed.createComponent(TestableInputWithCompletions);
     fixture.componentInstance.completions = ['a', 'b', 'c'];
     fixture.detectChanges();
@@ -116,8 +118,9 @@ describe('filter input widget', () => {
       key: 'Enter',
       startingCursorIndex: input.properties['selectionStart'],
     });
+    tick();
 
     const options2 = getAutocompleteOptions(overlayContainer);
     expect(options2.length).toBe(0);
-  });
+  }));
 });

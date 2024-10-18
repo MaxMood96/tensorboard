@@ -16,6 +16,7 @@ import {Component, NgModule} from '@angular/core';
 import {PluginRegistryModule} from '../plugin_registry_module';
 
 @Component({
+  standalone: false,
   selector: 'extra-dashboard',
   template: ` <div>I'm the extra Angular dashboard!</div> `,
 })
@@ -26,6 +27,6 @@ export class ExtraDashboardComponent {}
   imports: [
     PluginRegistryModule.forPlugin('extra-plugin', ExtraDashboardComponent),
   ],
-  entryComponents: [ExtraDashboardComponent],
+  jit: true,
 })
 export class ExtraDashboardModule {}

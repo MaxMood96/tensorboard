@@ -25,6 +25,7 @@ import {
 } from '../store/app_routing_selectors';
 
 @Component({
+  standalone: false,
   selector: 'router-outlet',
   template: `
     <router-outlet-component
@@ -34,25 +35,27 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RouterOutletContainer {
-  activeNgComponent$ = combineLatest([
-    this.store.select(getActiveRoute),
-    this.store.select(getNextRouteForRouterOutletOnly),
-  ]).pipe(
-    map(([activeRoute, nextRoute]) => {
-      if (!activeRoute) {
-        return null;
-      }
-      const isRouteTransitioning =
-        nextRoute !== null &&
-        !areSameRouteKindAndExperiments(activeRoute, nextRoute);
-      return isRouteTransitioning
-        ? null
-        : this.registry.getNgComponentByRouteKind(activeRoute.routeKind);
-    })
-  );
+  activeNgComponent$;
 
   constructor(
     private readonly store: Store<State>,
     private readonly registry: RouteRegistryModule
-  ) {}
+  ) {
+    this.activeNgComponent$ = combineLatest([
+      this.store.select(getActiveRoute),
+      this.store.select(getNextRouteForRouterOutletOnly),
+    ]).pipe(
+      map(([activeRoute, nextRoute]) => {
+        if (!activeRoute) {
+          return null;
+        }
+        const isRouteTransitioning =
+          nextRoute !== null &&
+          !areSameRouteKindAndExperiments(activeRoute, nextRoute);
+        return isRouteTransitioning
+          ? null
+          : this.registry.getNgComponentByRouteKind(activeRoute.routeKind);
+      })
+    );
+  }
 }

@@ -25,7 +25,6 @@ import {
   featureFlagOverridesReset,
   partialFeatureFlagsLoaded,
 } from '../actions/feature_flag_actions';
-import {ForceSvgDataSource} from '../force_svg_data_source';
 import {
   getFeatureFlags,
   getFeatureFlagsMetadata,
@@ -57,12 +56,6 @@ export class FeatureFlagEffects {
           isDarkModeAllowed,
           featureFlagsMetadata
         );
-
-        if (features.forceSvg != null) {
-          this.forceSvgDataSource.updateForceSvgFlag(features.forceSvg);
-        } else if (this.forceSvgDataSource.getForceSvgFlag()) {
-          features.forceSvg = true;
-        }
 
         return partialFeatureFlagsLoaded({features});
       })
@@ -97,7 +90,7 @@ export class FeatureFlagEffects {
   );
 
   /**
-   * When a feature flag is overriden this effect persists that override by
+   * When a feature flag is overridden this effect persists that override by
    * putting it in local storage using the dataSource.
    */
   readonly storeFeatureFlag$ = createEffect(
@@ -138,8 +131,7 @@ export class FeatureFlagEffects {
   constructor(
     private readonly actions$: Actions,
     private readonly store: Store<State>,
-    private readonly dataSource: TBFeatureFlagDataSource,
-    private readonly forceSvgDataSource: ForceSvgDataSource
+    private readonly dataSource: TBFeatureFlagDataSource
   ) {}
 
   /** @export */

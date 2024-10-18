@@ -17,16 +17,35 @@ limitations under the License.
 
 $_accent: map-get(mat.get-color-config($tb-theme), accent);
 
-.data-table {
-  border-spacing: 4px;
-  font-size: 13px;
+.data-table-wrapper {
+  display: flex;
 
-  th {
+  &.should-add-borders {
+    .left-section,
+    .right-section {
+      @include tb-theme-foreground-prop(border-top, border, 1px solid);
+    }
+
+    .add-button-column {
+      @include tb-theme-foreground-prop(border-left, border, 1px solid);
+    }
+  }
+}
+
+.data-table {
+  font-size: 13px;
+  display: table;
+  width: 100%;
+
+  .header {
     background-color: mat.get-color-from-palette($tb-background, background);
+    display: table-row;
+    font-weight: bold;
     position: sticky;
     text-align: left;
     top: 0;
     vertical-align: bottom;
+    z-index: 1;
 
     &:hover {
       cursor: pointer;
@@ -36,71 +55,50 @@ $_accent: map-get(mat.get-color-config($tb-theme), accent);
       background-color: map-get($tb-dark-background, background);
     }
   }
+}
 
-  .cell {
-    align-items: center;
-    display: flex;
+.loading {
+  align-items: center;
+  border: 0;
+  @include tb-theme-foreground-prop(border-bottom, border, 1px solid);
+  display: flex;
+  height: 48px;
+  padding: 0 24px;
+  justify-content: center;
+}
+
+.left-section {
+  flex-grow: 1;
+}
+
+.right-section {
+  background-color: mat.get-color-from-palette($tb-background, background);
+  position: sticky;
+  right: -1px; // Prevent fractional width from creating a gap.
+  z-index: 1;
+
+  @include tb-dark-theme {
+    background-color: map-get($tb-dark-background, background);
   }
 
-  .extra-right-padding {
-    // Add artificial padding to keep consistent with icons which have whitespace
-    padding-right: 1px;
+  .add-button-column {
+    width: 40px;
+    height: 100%;
+
+    .add-button {
+      position: sticky;
+      top: 0;
+    }
   }
+}
 
-  .row {
-    white-space: nowrap;
-  }
+.right-section .add-button-column.small-add-button {
+  display: flex;
+  justify-content: center;
+  width: 24px;
 
-  $_circle-size: 12px;
-
-  .row-circle {
-    align-items: center;
-    display: inline-flex;
-    height: $_circle-size;
-    width: $_circle-size;
-  }
-
-  .row-circle > span {
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    display: inline-block;
-    // Subtract by border width (1px on both sides)
-    height: $_circle-size - 2px;
-    width: $_circle-size - 2px;
-  }
-
-  .cell mat-icon {
-    height: 12px;
-    width: 12px;
-  }
-
-  .sorting-icon-container {
-    width: 12px;
-    height: 12px;
-    border-radius: 5px;
-  }
-
-  .show {
-    opacity: 1;
-  }
-
-  .show-on-hover {
-    opacity: 0;
-  }
-
-  th:hover .show-on-hover {
-    opacity: 0.3;
-  }
-
-  .highlight {
-    background-color: mat.get-color-from-palette(mat.$gray-palette, 200);
-  }
-
-  .highlight-border-right {
-    border-right: 2px solid mat.get-color-from-palette($_accent);
-  }
-
-  .highlight-border-left {
-    border-left: 2px solid mat.get-color-from-palette($_accent);
+  .add-button {
+    --tb-icon-button-width: 20px;
+    --tb-icon-button-height: 20px;
   }
 }

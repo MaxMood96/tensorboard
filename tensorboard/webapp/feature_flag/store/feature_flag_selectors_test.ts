@@ -120,7 +120,7 @@ describe('feature_flag_selectors', () => {
   });
 
   describe('#getFeatureFlagsToSendToServer', () => {
-    it('returns overriden flags to send to server', () => {
+    it('returns overridden flags to send to server', () => {
       // Give explicit defaultValues and modify sendToServer value for some of
       // the properties.
       const metadata = {
@@ -165,7 +165,7 @@ describe('feature_flag_selectors', () => {
       expect(actual).toEqual({inColab: true});
     });
 
-    it('ignores overriden flags that should not be sent to server', () => {
+    it('ignores overridden flags that should not be sent to server', () => {
       // Give explicit defaultValues and modify sendToServer value for some of
       // the properties.
       const metadata = {
@@ -363,85 +363,6 @@ describe('feature_flag_selectors', () => {
         })
       );
       expect(selectors.getIsMetricsImageSupportEnabled(state)).toEqual(true);
-    });
-  });
-
-  describe('#getIsLinkedTimeEnabled', () => {
-    it('returns the proper value', () => {
-      let state = buildState(
-        buildFeatureFlagState({
-          defaultFlags: buildFeatureFlag({
-            enabledLinkedTime: false,
-          }),
-        })
-      );
-      expect(selectors.getIsLinkedTimeEnabled(state)).toEqual(false);
-
-      state = buildState(
-        buildFeatureFlagState({
-          defaultFlags: buildFeatureFlag({
-            enabledLinkedTime: false,
-          }),
-          flagOverrides: {
-            enabledLinkedTime: true,
-          },
-        })
-      );
-      expect(selectors.getIsLinkedTimeEnabled(state)).toEqual(true);
-    });
-  });
-
-  describe('#getIsDataTableEnabled', () => {
-    it('returns the proper value', () => {
-      let state = buildState(
-        buildFeatureFlagState({
-          defaultFlags: buildFeatureFlag({
-            enabledScalarDataTable: false,
-          }),
-        })
-      );
-      expect(selectors.getIsDataTableEnabled(state)).toEqual(false);
-
-      state = buildState(
-        buildFeatureFlagState({
-          defaultFlags: buildFeatureFlag({
-            enabledScalarDataTable: false,
-          }),
-          flagOverrides: {
-            enabledScalarDataTable: true,
-          },
-        })
-      );
-      expect(selectors.getIsDataTableEnabled(state)).toEqual(true);
-    });
-  });
-
-  describe('#getIsLinkedTimeProspectiveFobEnabled', () => {
-    it('returns the proper value', () => {
-      let state = buildState(
-        buildFeatureFlagState({
-          defaultFlags: buildFeatureFlag({
-            enabledProspectiveFob: false,
-          }),
-        })
-      );
-      expect(selectors.getIsLinkedTimeProspectiveFobEnabled(state)).toEqual(
-        false
-      );
-
-      state = buildState(
-        buildFeatureFlagState({
-          defaultFlags: buildFeatureFlag({
-            enabledProspectiveFob: false,
-          }),
-          flagOverrides: {
-            enabledProspectiveFob: true,
-          },
-        })
-      );
-      expect(selectors.getIsLinkedTimeProspectiveFobEnabled(state)).toEqual(
-        true
-      );
     });
   });
 });

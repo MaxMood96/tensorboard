@@ -24,6 +24,7 @@ import {GroupBy, GroupByKey} from '../../types';
 import {RegexEditDialogContainer} from './regex_edit_dialog_container';
 
 @Component({
+  standalone: false,
   selector: 'runs-group-menu-button-component',
   templateUrl: 'runs_group_menu_button_component.ng.html',
   styleUrls: ['runs_group_menu_button_component.css'],
@@ -36,6 +37,7 @@ export class RunsGroupMenuButtonComponent {
   @Input() experimentIds!: string[];
   @Input() regexString!: string;
   @Input() selectedGroupBy!: GroupBy;
+  @Input() lastRegexGroupByKey!: GroupByKey;
 
   @Output()
   onGroupByChange = new EventEmitter<GroupBy>();
@@ -43,11 +45,12 @@ export class RunsGroupMenuButtonComponent {
   constructor(private readonly dialog: MatDialog) {}
 
   onRegexStringEdit() {
-    // data pass in the experiment id
-    const dialogRef = this.dialog.open(RegexEditDialogContainer, {
+    this.dialog.open(RegexEditDialogContainer, {
       maxHeight: '95vh',
       maxWidth: '80vw',
-      data: {experimentIds: this.experimentIds},
+      data: {
+        experimentIds: this.experimentIds,
+      },
     });
   }
 
@@ -56,7 +59,7 @@ export class RunsGroupMenuButtonComponent {
       this.onRegexStringEdit();
     } else {
       this.onGroupByChange.emit({
-        key: GroupByKey.REGEX,
+        key: this.lastRegexGroupByKey,
         regexString: this.regexString,
       });
     }

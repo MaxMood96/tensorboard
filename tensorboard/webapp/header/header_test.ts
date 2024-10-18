@@ -105,7 +105,7 @@ describe('header test', () => {
     const fixture = TestBed.createComponent(HeaderComponent);
     fixture.detectChanges();
 
-    const els = fixture.debugElement.queryAll(By.css('.mat-tab-label'));
+    const els = fixture.debugElement.queryAll(By.css('.mat-mdc-tab'));
     expect(els.length).toBe(2);
 
     assertDebugElementText(els[0], 'FOO FIGHTER');
@@ -125,7 +125,7 @@ describe('header test', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const els = fixture.debugElement.queryAll(By.css('.mat-tab-label'));
+    const els = fixture.debugElement.queryAll(By.css('.mat-mdc-tab'));
     expect(els.length).toBe(3);
     assertDebugElementText(els[0], 'MEOW');
     assertDebugElementText(els[1], 'WOOF');

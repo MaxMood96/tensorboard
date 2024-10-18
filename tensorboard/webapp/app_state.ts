@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+import {State as AlertState} from './alert/store/alert_types';
 import {State as AppRoutingState} from './app_routing/store/app_routing_types';
 import {State as CoreState} from './core/store/core_types';
 import {State as ExperimentsState} from './experiments/store/experiments_types';
@@ -20,8 +21,7 @@ import {State as FeatureFlagState} from './feature_flag/store/feature_flag_types
 import {State as HparamsState} from './hparams/types';
 import {State as MetricsState} from './metrics/store/metrics_types';
 import {State as NotificationState} from './notification_center/_redux/notification_center_types';
-import {State as NpmiState} from './plugins/npmi/store/npmi_types';
-import {State as TextState} from './plugins/text_v2/store/text_types';
+import {State as PersistentSettingsState} from './persistent_settings/_redux/persistent_settings_types';
 import {State as RunsState} from './runs/store/runs_types';
 import {State as SettingsState} from './settings';
 
@@ -31,8 +31,8 @@ export type State = AppRoutingState &
   FeatureFlagState &
   HparamsState &
   MetricsState &
-  NpmiState &
   RunsState &
   SettingsState &
-  TextState &
-  NotificationState;
+  NotificationState &
+  AlertState &
+  PersistentSettingsState;

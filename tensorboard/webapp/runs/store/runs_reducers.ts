@@ -24,7 +24,6 @@ import {stateRehydratedFromUrl} from '../../app_routing/actions';
 import {createNamespaceContextedState} from '../../app_routing/namespaced_state_reducer_helper';
 import {RouteKind} from '../../app_routing/types';
 import {DataLoadState} from '../../types/data';
-import {SortDirection} from '../../types/ui';
 import {composeReducers} from '../../util/ngrx';
 import * as runsActions from '../actions';
 import {GroupByKey, URLDeserializedState} from '../types';
@@ -35,9 +34,11 @@ import {
   RunsDataState,
   RunsState,
   RunsUiNamespacedState,
+  RunsUiNonNamespacedState,
   RunsUiState,
 } from './runs_types';
 import {createGroupBy, groupRuns} from './utils';
+import {ColumnHeaderType, SortingOrder} from '../../widgets/data_table/types';
 
 const {
   initialState: dataInitialState,
@@ -117,7 +118,8 @@ const dataReducer: ActionReducer<RunsDataState, Action> = createReducer(
     let {colorGroupRegexString, userSetGroupByKey} = state;
     if (groupBy) {
       const regexString =
-        groupBy.key === GroupByKey.REGEX
+        groupBy.key === GroupByKey.REGEX ||
+        groupBy.key === GroupByKey.REGEX_BY_EXP
           ? groupBy.regexString
           : state.colorGroupRegexString;
       colorGroupRegexString = regexString;
@@ -155,8 +157,8 @@ const dataReducer: ActionReducer<RunsDataState, Action> = createReducer(
     const nextRunIdToExpId = {...state.runIdToExpId};
     const nextRunsLoadState = {...state.runsLoadState};
 
-    for (const eid of Object.keys(action.newRunsAndMetadata)) {
-      const {runs, metadata} = action.newRunsAndMetadata[eid];
+    for (const eid of Object.keys(action.newRuns)) {
+      const {runs} = action.newRuns[eid];
       nextRunIds[eid] = runs.map(({id}) => id);
       nextRunsLoadState[eid] = {
         ...nextRunsLoadState[eid],
@@ -165,11 +167,13 @@ const dataReducer: ActionReducer<RunsDataState, Action> = createReducer(
       };
 
       for (const run of runs) {
-        const hparamAndMetrics = metadata.runToHparamsAndMetrics[run.id];
         nextRunMetadata[run.id] = {
           ...run,
-          hparams: hparamAndMetrics ? hparamAndMetrics.hparams : null,
-          metrics: hparamAndMetrics ? hparamAndMetrics.metrics : null,
+          // fetchRunsSucceeded once contained hparam and metric information.
+          // No longer. These are always null in state and augmented downstream
+          // by the hparams feature.
+          hparams: null,
+          metrics: null,
         };
         nextRunIdToExpId[run.id] = eid;
       }
@@ -200,48 +204,56 @@ const dataReducer: ActionReducer<RunsDataState, Action> = createReducer(
     }
     return {...state, runsLoadState: nextRunsLoadState};
   }),
-  on(runsActions.fetchRunsSucceeded, (state, {runsForAllExperiments}) => {
-    const groupKeyToColorId = new Map(state.groupKeyToColorId);
-    const defaultRunColorIdForGroupBy = new Map(
-      state.defaultRunColorIdForGroupBy
-    );
-
-    let groupBy = state.initialGroupBy;
-    if (state.userSetGroupByKey !== null) {
-      groupBy = createGroupBy(
-        state.userSetGroupByKey,
-        state.colorGroupRegexString
+  on(
+    runsActions.fetchRunsSucceeded,
+    (state, {runsForAllExperiments, expNameByExpId}) => {
+      const groupKeyToColorId = new Map(state.groupKeyToColorId);
+      const defaultRunColorIdForGroupBy = new Map(
+        state.defaultRunColorIdForGroupBy
       );
-    }
-    const groups = groupRuns(
-      groupBy,
-      runsForAllExperiments,
-      state.runIdToExpId
-    );
 
-    Object.entries(groups.matches).forEach(([groupId, runs]) => {
-      const colorId = groupKeyToColorId.get(groupId) ?? groupKeyToColorId.size;
-      groupKeyToColorId.set(groupId, colorId);
-
-      for (const run of runs) {
-        defaultRunColorIdForGroupBy.set(run.id, colorId);
+      let groupBy = state.initialGroupBy;
+      if (state.userSetGroupByKey !== null) {
+        groupBy = createGroupBy(
+          state.userSetGroupByKey,
+          state.colorGroupRegexString
+        );
       }
-    });
+      const groups = groupRuns(
+        groupBy,
+        runsForAllExperiments,
+        state.runIdToExpId,
+        expNameByExpId
+      );
 
-    // unassign color for nonmatched runs to apply default unassigned style
-    for (const run of groups.nonMatches) {
-      defaultRunColorIdForGroupBy.set(run.id, -1);
+      Object.entries(groups.matches).forEach(([groupId, runs]) => {
+        const colorId =
+          groupKeyToColorId.get(groupId) ?? groupKeyToColorId.size;
+        groupKeyToColorId.set(groupId, colorId);
+
+        for (const run of runs) {
+          defaultRunColorIdForGroupBy.set(run.id, colorId);
+        }
+      });
+
+      // unassign color for nonmatched runs to apply default unassigned style
+      for (const run of groups.nonMatches) {
+        defaultRunColorIdForGroupBy.set(run.id, -1);
+      }
+
+      return {
+        ...state,
+        defaultRunColorIdForGroupBy,
+        groupKeyToColorId,
+      };
     }
-
-    return {
-      ...state,
-      defaultRunColorIdForGroupBy,
-      groupKeyToColorId,
-    };
-  }),
+  ),
   on(
     runsActions.runGroupByChanged,
-    (state: RunsDataState, {experimentIds, groupBy}): RunsDataState => {
+    (
+      state: RunsDataState,
+      {experimentIds, groupBy, expNameByExpId}
+    ): RunsDataState => {
       // Reset the groupKeyToColorId
       const groupKeyToColorId = new Map<string, number>();
       const defaultRunColorIdForGroupBy = new Map(
@@ -252,7 +264,12 @@ const dataReducer: ActionReducer<RunsDataState, Action> = createReducer(
         .flatMap((experimentId) => state.runIds[experimentId])
         .map((runId) => state.runMetadata[runId]);
 
-      const groups = groupRuns(groupBy, allRuns, state.runIdToExpId);
+      const groups = groupRuns(
+        groupBy,
+        allRuns,
+        state.runIdToExpId,
+        expNameByExpId
+      );
 
       Object.entries(groups.matches).forEach(([groupId, runs]) => {
         const colorId =
@@ -270,7 +287,8 @@ const dataReducer: ActionReducer<RunsDataState, Action> = createReducer(
       }
 
       const updatedRegexString =
-        groupBy.key === GroupByKey.REGEX
+        groupBy.key === GroupByKey.REGEX ||
+        groupBy.key === GroupByKey.REGEX_BY_EXP
           ? groupBy.regexString
           : state.colorGroupRegexString;
 
@@ -304,56 +322,77 @@ const dataReducers = composeReducers(
   dataNamespaceContextedReducers
 );
 
-const initialSort: RunsUiNamespacedState['sort'] = {
-  key: null,
-  direction: SortDirection.UNSET,
-};
 const {initialState: uiInitialState, reducers: uiNamespaceContextedReducers} =
-  createNamespaceContextedState(
+  createNamespaceContextedState<
+    RunsUiNamespacedState,
+    RunsUiNonNamespacedState
+  >(
     {
-      paginationOption: {
-        pageIndex: 0,
-        pageSize: 10,
-      },
-      sort: initialSort,
       selectionState: new Map<string, boolean>(),
+      runsTableHeaders: [
+        {
+          type: ColumnHeaderType.RUN,
+          name: 'run',
+          displayName: 'Run',
+          enabled: true,
+          sortable: true,
+          removable: false,
+          movable: false,
+          filterable: false,
+        },
+      ],
+      sortingInfo: {
+        name: 'run',
+        order: SortingOrder.ASCENDING,
+      },
     },
-    {}
+    {},
+    /* onNavigated() */
+    (state, oldRoute, newRoute) => {
+      if (!areSameRouteKindAndExperiments(oldRoute, newRoute)) {
+        if (
+          newRoute.routeKind === RouteKind.COMPARE_EXPERIMENT &&
+          !state.runsTableHeaders.find(
+            (header) => header.name === 'experimentAlias'
+          )
+        ) {
+          const newRunsTableHeaders = [
+            ...state.runsTableHeaders,
+            {
+              type: ColumnHeaderType.CUSTOM,
+              name: 'experimentAlias',
+              displayName: 'Experiment',
+              enabled: true,
+              movable: false,
+              sortable: true,
+            },
+          ];
+
+          return {
+            ...state,
+            runsTableHeaders: newRunsTableHeaders,
+          };
+        }
+        if (
+          oldRoute?.routeKind === RouteKind.COMPARE_EXPERIMENT &&
+          newRoute.routeKind !== RouteKind.COMPARE_EXPERIMENT
+        ) {
+          const newRunsTableHeaders = state.runsTableHeaders.filter(
+            (column) => column.name !== 'experimentAlias'
+          );
+
+          return {
+            ...state,
+            runsTableHeaders: newRunsTableHeaders,
+          };
+        }
+      }
+      return state;
+    }
   );
 
 const uiReducer: ActionReducer<RunsUiState, Action> = createReducer(
   uiInitialState,
-  on(
-    runsActions.runSelectorPaginationOptionChanged,
-    (state, {pageSize, pageIndex}) => {
-      return {
-        ...state,
-        paginationOption: {
-          pageSize,
-          pageIndex,
-        },
-      };
-    }
-  ),
-  on(runsActions.runSelectorRegexFilterChanged, (state, action) => {
-    return {
-      ...state,
-      paginationOption: {
-        ...state.paginationOption,
-        // Reset the page index to 0 to emulate mat-table behavior.
-        pageIndex: 0,
-      },
-    };
-  }),
-  on(runsActions.runSelectorSortChanged, (state, action) => {
-    return {
-      ...state,
-      sort: {
-        key: action.key,
-        direction: action.direction,
-      },
-    };
-  }),
   on(runsActions.fetchRunsSucceeded, (state, action) => {
     const nextSelectionState = new Map(state.selectionState);
 
@@ -406,6 +445,41 @@ const uiReducer: ActionReducer<RunsUiState, Action> = createReducer(
     return {
       ...state,
       selectionState: nextSelectionState,
+    };
+  }),
+  on(runsActions.runsTableHeaderAdded, (state, {header, index}) => {
+    const newRunsTableHeaders = [...state.runsTableHeaders];
+    if (index === undefined) {
+      newRunsTableHeaders.push(header);
+    } else {
+      newRunsTableHeaders.splice(index, 0, header);
+    }
+
+    return {
+      ...state,
+      runsTableHeaders: newRunsTableHeaders,
+    };
+  }),
+  on(runsActions.runsTableHeaderRemoved, (state, {header}) => {
+    const newRunsTableHeaders = state.runsTableHeaders.filter(
+      ({name}) => name !== header.name
+    );
+
+    return {
+      ...state,
+      runsTableHeaders: newRunsTableHeaders,
+    };
+  }),
+  on(runsActions.runsTableHeaderOrderChanged, (state, {newHeaderOrder}) => {
+    return {
+      ...state,
+      runsTableHeaders: newHeaderOrder,
+    };
+  }),
+  on(runsActions.runsTableSortingInfoChanged, (state, {sortingInfo}) => {
+    return {
+      ...state,
+      sortingInfo,
     };
   })
 );

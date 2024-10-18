@@ -16,6 +16,7 @@ import {Injectable} from '@angular/core';
 import {TestBed} from '@angular/core/testing';
 import {firstValueFrom} from 'rxjs';
 import {TooltipSort} from '../../metrics/types';
+import {ColumnHeaderType} from '../../widgets/data_table/types';
 import {
   OSSSettingsConverter,
   PersistentSettingsDataSourceImpl,
@@ -182,6 +183,235 @@ describe('persistent_settings data_source test', () => {
           linkedTimeEnabled: true,
         });
       });
+      it('properly converts singleSelectionHeaders', async () => {
+        getItemSpy.withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY).and.returnValue(
+          JSON.stringify({
+            singleSelectionHeaders: [
+              {
+                type: ColumnHeaderType.RUN,
+                name: 'run',
+                displayName: 'Run',
+                enabled: true,
+              },
+              {
+                type: ColumnHeaderType.VALUE,
+                name: 'value',
+                displayName: 'Value',
+                enabled: false,
+              },
+            ],
+          })
+        );
+
+        const actual = await firstValueFrom(dataSource.getSettings());
+
+        expect(actual).toEqual({
+          singleSelectionHeaders: [
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+              removable: false,
+              sortable: true,
+              movable: false,
+            },
+            {
+              type: ColumnHeaderType.VALUE,
+              name: 'value',
+              displayName: 'Value',
+              enabled: false,
+              removable: true,
+              sortable: true,
+              movable: true,
+            },
+          ],
+        });
+      });
+
+      it('properly converts rangeSelectionHeaders', async () => {
+        getItemSpy.withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY).and.returnValue(
+          JSON.stringify({
+            rangeSelectionHeaders: [
+              {
+                type: ColumnHeaderType.RUN,
+                name: 'run',
+                displayName: 'Run',
+                enabled: true,
+              },
+              {
+                type: ColumnHeaderType.MIN_VALUE,
+                name: 'minValue',
+                displayName: 'Min',
+                enabled: false,
+              },
+            ],
+          })
+        );
+
+        const actual = await firstValueFrom(dataSource.getSettings());
+
+        expect(actual).toEqual({
+          rangeSelectionHeaders: [
+            {
+              type: ColumnHeaderType.RUN,
+              name: 'run',
+              displayName: 'Run',
+              enabled: true,
+              removable: false,
+              sortable: true,
+              movable: false,
+            },
+            {
+              type: ColumnHeaderType.MIN_VALUE,
+              name: 'minValue',
+              displayName: 'Min',
+              enabled: false,
+              removable: true,
+              sortable: true,
+              movable: true,
+            },
+          ],
+        });
+      });
+
+      it('resets singleSelectionEnabled if old ColumnHeader is stored', async () => {
+        getItemSpy.withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY).and.returnValue(
+          JSON.stringify({
+            singleSelectionHeaders: [
+              {
+                type: ColumnHeaderType.RUN,
+                enabled: true,
+              },
+              {
+                type: ColumnHeaderType.VALUE,
+                enabled: false,
+              },
+            ],
+          })
+        );
+
+        const actual = await firstValueFrom(dataSource.getSettings());
+
+        expect(actual).toEqual({});
+      });
+
+      it('resets singleSelectionEnabled if runs header is not first', async () => {
+        getItemSpy.withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY).and.returnValue(
+          JSON.stringify({
+            singleSelectionHeaders: [
+              {
+                type: ColumnHeaderType.VALUE,
+                enabled: false,
+              },
+              {
+                type: ColumnHeaderType.RUN,
+                enabled: true,
+              },
+            ],
+          })
+        );
+
+        const actual = await firstValueFrom(dataSource.getSettings());
+
+        expect(actual).toEqual({});
+      });
+
+      it('resets rangeSelectionEnabled if old ColumnHeader is stored', async () => {
+        getItemSpy.withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY).and.returnValue(
+          JSON.stringify({
+            rangeSelectionHeaders: [
+              {
+                type: ColumnHeaderType.RUN,
+                enabled: true,
+              },
+              {
+                type: ColumnHeaderType.MIN_VALUE,
+                enabled: true,
+              },
+            ],
+          })
+        );
+
+        const actual = await firstValueFrom(dataSource.getSettings());
+
+        expect(actual).toEqual({});
+      });
+
+      it('resets rangeSelectionEnabled if runs header is not first', async () => {
+        getItemSpy.withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY).and.returnValue(
+          JSON.stringify({
+            rangeSelectionHeaders: [
+              {
+                type: ColumnHeaderType.MIN_VALUE,
+                enabled: true,
+              },
+              {
+                type: ColumnHeaderType.RUN,
+                enabled: true,
+              },
+            ],
+          })
+        );
+
+        const actual = await firstValueFrom(dataSource.getSettings());
+
+        expect(actual).toEqual({});
+      });
+
+      it('properly converts dashboardDisplayedHparamColumns', async () => {
+        getItemSpy.withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY).and.returnValue(
+          JSON.stringify({
+            dashboardDisplayedHparamColumns: [
+              {
+                type: ColumnHeaderType.HPARAM,
+                name: 'conv_layers',
+                displayName: 'Conv Layers',
+                enabled: true,
+              },
+              {
+                type: ColumnHeaderType.HPARAM,
+                name: 'conv_kernel_size',
+                displayName: 'Conv Kernel Size',
+                enabled: true,
+              },
+            ],
+          })
+        );
+
+        const actual = await firstValueFrom(dataSource.getSettings());
+
+        expect(actual).toEqual({
+          dashboardDisplayedHparamColumns: [
+            {
+              type: ColumnHeaderType.HPARAM,
+              name: 'conv_layers',
+              displayName: 'Conv Layers',
+              enabled: true,
+            },
+            {
+              type: ColumnHeaderType.HPARAM,
+              name: 'conv_kernel_size',
+              displayName: 'Conv Kernel Size',
+              enabled: true,
+            },
+          ],
+        });
+      });
+
+      it('properly converts savingPinsEnabled', async () => {
+        getItemSpy.withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY).and.returnValue(
+          JSON.stringify({
+            savingPinsEnabled: false,
+          })
+        );
+
+        const actual = await firstValueFrom(dataSource.getSettings());
+
+        expect(actual).toEqual({
+          savingPinsEnabled: false,
+        });
+      });
     });
 
     describe('#setSettings', () => {
@@ -262,6 +492,70 @@ describe('persistent_settings data_source test', () => {
           TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY,
           JSON.stringify({
             linkedTimeEnabled: true,
+          })
+        );
+      });
+
+      it('properly converts dashboardDisplayedHparamColumns', async () => {
+        getItemSpy
+          .withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY)
+          .and.returnValue(null);
+
+        await firstValueFrom(
+          dataSource.setSettings({
+            dashboardDisplayedHparamColumns: [
+              {
+                type: ColumnHeaderType.HPARAM,
+                name: 'conv_layers',
+                displayName: 'Conv Layers',
+                enabled: true,
+              },
+              {
+                type: ColumnHeaderType.HPARAM,
+                name: 'conv_kernel_size',
+                displayName: 'Conv Kernel Size',
+                enabled: true,
+              },
+            ],
+          })
+        );
+
+        expect(setItemSpy).toHaveBeenCalledOnceWith(
+          TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY,
+          JSON.stringify({
+            dashboardDisplayedHparamColumns: [
+              {
+                type: ColumnHeaderType.HPARAM,
+                name: 'conv_layers',
+                displayName: 'Conv Layers',
+                enabled: true,
+              },
+              {
+                type: ColumnHeaderType.HPARAM,
+                name: 'conv_kernel_size',
+                displayName: 'Conv Kernel Size',
+                enabled: true,
+              },
+            ],
+          })
+        );
+      });
+
+      it('properly converts savingPinsEnabled', async () => {
+        getItemSpy
+          .withArgs(TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY)
+          .and.returnValue(null);
+
+        await firstValueFrom(
+          dataSource.setSettings({
+            savingPinsEnabled: false,
+          })
+        );
+
+        expect(setItemSpy).toHaveBeenCalledOnceWith(
+          TEST_ONLY.GLOBAL_LOCAL_STORAGE_KEY,
+          JSON.stringify({
+            savingPinsEnabled: false,
           })
         );
       });

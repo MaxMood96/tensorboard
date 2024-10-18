@@ -13,69 +13,35 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+import {DeepPartial} from '../../util/types';
 import {
   DatasetType,
-  DiscreteFilter,
   DomainType,
   HparamSpec,
+  HparamValue,
   HparamsValueType,
-  IntervalFilter,
-  MetricSpec,
+  MetricsValue,
+  RunStatus,
+  Session,
+  SessionGroup,
 } from '../_types';
-import {
-  HparamsMetricsAndFilters,
-  HparamsState,
-  HPARAMS_FEATURE_KEY,
-  State,
-} from './types';
-import {getIdFromExperimentIds} from './utils';
-
-export function buildSpecs(
-  experimentId: string,
-  override: Partial<HparamsMetricsAndFilters> = {}
-): Record<string, HparamsMetricsAndFilters> {
-  const {
-    hparam = {
-      specs: [],
-      defaultFilters: new Map(),
-    },
-    metric = {
-      specs: [],
-      defaultFilters: new Map(),
-    },
-  } = override;
-
-  return {
-    [experimentId]: {hparam, metric},
-  };
-}
-
-export function buildFilterState(
-  experimentIds: string[],
-  override: Partial<HparamsState['filters'][string]> = {}
-): HparamsState['filters'] {
-  const {hparams = new Map(), metrics = new Map()} = override;
-
-  return {
-    [getIdFromExperimentIds(experimentIds)]: {
-      hparams,
-      metrics,
-    },
-  };
-}
+import {HparamsState, HPARAMS_FEATURE_KEY, State} from './types';
 
 export function buildHparamsState(
-  specOverrides?: Partial<HparamsState['specs']>,
-  filterOverrides?: Partial<HparamsState['filters']>
+  overrides: DeepPartial<HparamsState> = {}
 ): HparamsState {
   return {
-    specs: {
-      ...specOverrides,
-    } as Record<string, HparamsMetricsAndFilters>,
-    filters: {
-      ...filterOverrides,
-    } as HparamsState['filters'],
-  };
+    dashboardHparamSpecs: overrides.dashboardHparamSpecs ?? [],
+    dashboardSessionGroups: overrides.dashboardSessionGroups ?? [],
+    dashboardFilters: {
+      hparams: overrides.dashboardFilters?.hparams ?? new Map(),
+      metrics: overrides.dashboardFilters?.metrics ?? new Map(),
+    },
+    dashboardDisplayedHparamColumns:
+      overrides.dashboardDisplayedHparamColumns ?? [],
+    numDashboardHparamsLoaded: overrides.numDashboardHparamsLoaded ?? 0,
+    numDashboardHparamsToLoad: overrides.numDashboardHparamsToLoad ?? 0,
+  } as HparamsState;
 }
 
 export function buildStateFromHparamsState(hparamsState: HparamsState): State {
@@ -91,44 +57,56 @@ export function buildHparamSpec(
     domain: {type: DomainType.INTERVAL, minValue: 0, maxValue: 1},
     name: 'sample_param',
     type: HparamsValueType.DATA_TYPE_FLOAT64,
+    differs: false,
     ...override,
   };
 }
 
-export function buildMetricSpec(
-  override: Partial<MetricSpec> = {}
-): MetricSpec {
+export function buildMetricsValue(
+  override: DeepPartial<MetricsValue> = {}
+): MetricsValue {
   return {
-    tag: 'tag',
-    displayName: 'Tag',
-    description: 'This is a tags',
-    datasetType: DatasetType.DATASET_TRAINING,
+    trainingStep: 0,
+    value: 1,
+    wallTimeSecs: 123,
+    ...override,
+    name: {
+      tag: override.name?.tag ?? 'someTag',
+      group: override.name?.group ?? 'someGroup',
+    },
+  };
+}
+
+export function buildHparamValue(override: Partial<HparamValue>): HparamValue {
+  return {
+    name: 'some_hparam',
+    value: 4,
     ...override,
   };
 }
 
-export function buildDiscreteFilter(
-  override: Partial<DiscreteFilter> = {}
-): DiscreteFilter {
+export function buildSession(override: DeepPartial<Session> = {}): Session {
   return {
-    type: DomainType.DISCRETE,
-    includeUndefined: true,
-    possibleValues: [1, 10, 100],
-    filterValues: [1, 100],
+    name: 'someExperiment/someRun',
+    modelUri: '',
+    monitorUrl: '',
+    startTimeSecs: 123,
+    endTimeSecs: 456,
+    status: RunStatus.STATUS_UNKNOWN,
     ...override,
+    metricValues: [...(override.metricValues ?? [])].map(buildMetricsValue),
   };
 }
 
-export function buildIntervalFilter(
-  override: Partial<IntervalFilter> = {}
-): IntervalFilter {
+export function buildSessionGroup(
+  override: DeepPartial<SessionGroup>
+): SessionGroup {
   return {
-    type: DomainType.INTERVAL,
-    includeUndefined: true,
-    minValue: 0,
-    maxValue: 100,
-    filterLowerValue: 5,
-    filterUpperValue: 10,
+    name: 'some_session_group',
     ...override,
+    hparams: {
+      ...override.hparams,
+    } as any,
+    sessions: (override.sessions ?? []).map(buildSession),
   };
 }

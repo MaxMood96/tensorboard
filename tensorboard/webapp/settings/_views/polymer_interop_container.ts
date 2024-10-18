@@ -30,18 +30,21 @@ import {State} from '../_redux/settings_types';
  * only (2) kinds. For (1), please refer to the hash_storage.
  */
 @Component({
+  standalone: false,
   selector: 'settings-polymer-interop',
   template: '',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SettingsPolymerInteropContainer {
   private readonly ngUnsubscribe = new Subject<void>();
-  private readonly getPageSize$ = this.store.pipe(select(getPageSize));
+  private readonly getPageSize$;
   private readonly paginatedViewStore = document.createElement(
     'tf-paginated-view-store'
   ).tf_paginated_view;
 
-  constructor(private store: Store<State>) {}
+  constructor(private store: Store<State>) {
+    this.getPageSize$ = this.store.pipe(select(getPageSize));
+  }
 
   ngOnInit() {
     this.getPageSize$

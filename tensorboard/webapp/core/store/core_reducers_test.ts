@@ -12,9 +12,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-import {globalSettingsLoaded} from '../../persistent_settings';
+import {stateRehydratedFromUrl} from '../../app_routing/actions/app_routing_actions';
+import {RouteKind} from '../../app_routing/types';
+import {persistentSettingsLoaded} from '../../persistent_settings';
 import {DataLoadState} from '../../types/data';
 import * as actions from '../actions';
+import {runsTableFullScreenToggled} from '../actions';
 import {
   buildPluginMetadata,
   createCoreState,
@@ -591,14 +594,14 @@ describe('core reducer', () => {
     });
   });
 
-  describe('#globalSettingsLoaded', () => {
+  describe('#persistentSettingsLoaded', () => {
     it('loads sideBarWidthInPercent from settings when present', () => {
       const state = createCoreState({
         sideBarWidthInPercent: 0,
       });
       const nextState = reducers(
         state,
-        globalSettingsLoaded({partialSettings: {sideBarWidthInPercent: 40}})
+        persistentSettingsLoaded({partialSettings: {sideBarWidthInPercent: 40}})
       );
 
       expect(nextState.sideBarWidthInPercent).toBe(40);
@@ -610,7 +613,7 @@ describe('core reducer', () => {
       });
       const nextState = reducers(
         state,
-        globalSettingsLoaded({partialSettings: {}})
+        persistentSettingsLoaded({partialSettings: {}})
       );
 
       expect(nextState.sideBarWidthInPercent).toBe(0);
@@ -622,21 +625,68 @@ describe('core reducer', () => {
       });
       const state2 = reducers(
         state1,
-        globalSettingsLoaded({partialSettings: {sideBarWidthInPercent: 101}})
+        persistentSettingsLoaded({
+          partialSettings: {sideBarWidthInPercent: 101},
+        })
       );
       expect(state2.sideBarWidthInPercent).toBe(0);
 
       const state3 = reducers(
         state2,
-        globalSettingsLoaded({partialSettings: {sideBarWidthInPercent: -1}})
+        persistentSettingsLoaded({partialSettings: {sideBarWidthInPercent: -1}})
       );
       expect(state3.sideBarWidthInPercent).toBe(0);
 
       const state4 = reducers(
         state3,
-        globalSettingsLoaded({partialSettings: {sideBarWidthInPercent: NaN}})
+        persistentSettingsLoaded({
+          partialSettings: {sideBarWidthInPercent: NaN},
+        })
       );
       expect(state4.sideBarWidthInPercent).toBe(0);
+    });
+  });
+
+  describe('#runsTableFullScreenToggled', () => {
+    it('toggles runsTableFullScreen attribute', () => {
+      const state = createCoreState({
+        runsTableFullScreen: false,
+      });
+      const state2 = reducers(state, runsTableFullScreenToggled());
+      const state3 = reducers(state2, runsTableFullScreenToggled());
+
+      expect(state2.runsTableFullScreen).toBeTrue();
+      expect(state3.runsTableFullScreen).toBeFalse();
+    });
+  });
+
+  describe('#stateRehydratedFromUrl', () => {
+    it('stores unknownQueryParams', () => {
+      const state = createCoreState();
+      const state2 = reducers(
+        state,
+        stateRehydratedFromUrl({
+          routeKind: RouteKind.EXPERIMENT,
+          partialState: {unknownQueryParams: {foo: 'bar'}},
+        })
+      );
+      expect(state2.unknownQueryParams).toEqual({
+        foo: 'bar',
+      });
+    });
+
+    it('stores an empty object when no value is provided', () => {
+      const state = createCoreState({
+        unknownQueryParams: {foo: 'bar'},
+      });
+      const state2 = reducers(
+        state,
+        stateRehydratedFromUrl({
+          routeKind: RouteKind.EXPERIMENT,
+          partialState: {},
+        })
+      );
+      expect(state2.unknownQueryParams).toEqual({});
     });
   });
 });

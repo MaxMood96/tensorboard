@@ -5,6 +5,8 @@
 # demonstrate that Bazel is not required); we use this BUILD file only
 # to define integration tests for TensorBoard itself.
 
+load("@rules_python//python:py_test.bzl", "py_test")
+
 package(default_visibility = ["//tensorboard:internal"])
 
 licenses(["notice"])
@@ -41,5 +43,6 @@ py_test(
     tags = ["support_notf"],
     deps = [
         "//tensorboard",
+        "//tensorboard/examples/plugins/example_raw_scalars/tensorboard_plugin_example_raw_scalars:plugin",
     ],
 )

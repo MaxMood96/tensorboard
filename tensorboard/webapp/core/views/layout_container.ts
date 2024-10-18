@@ -20,18 +20,22 @@ import {
 } from '@angular/core';
 import {Store} from '@ngrx/store';
 import {fromEvent, Observable, Subject} from 'rxjs';
-import {filter, takeUntil} from 'rxjs/operators';
+import {combineLatestWith, filter, map, takeUntil} from 'rxjs/operators';
 import {MouseEventButtons} from '../../util/dom';
-import {sideBarWidthChanged} from '../actions';
+import {runsTableFullScreenToggled, sideBarWidthChanged} from '../actions';
 import {State} from '../state';
-import {getSideBarWidthInPercent} from '../store/core_selectors';
+import {
+  getRunsTableFullScreen,
+  getSideBarWidthInPercent,
+} from '../store/core_selectors';
 
 @Component({
+  standalone: false,
   selector: 'tb-dashboard-layout',
   template: `
     <button
       *ngIf="(width$ | async) === 0"
-      class="expand"
+      class="expand-collapsed-sidebar"
       (click)="expandSidebar()"
     >
       <mat-icon svgIcon="expand_more_24px"></mat-icon>
@@ -41,8 +45,29 @@ import {getSideBarWidthInPercent} from '../store/core_selectors';
       class="sidebar"
       [style.width.%]="width$ | async"
       [style.minWidth.px]="MINIMUM_SIDEBAR_WIDTH_IN_PX"
+      [style.maxWidth.%]="(runsTableFullScreen$ | async) ? 100 : ''"
     >
       <ng-content select="[sidebar]"></ng-content>
+      <div
+        class="full-screen-toggle"
+        [ngClass]="{'full-screen': (runsTableFullScreen$ | async)}"
+      >
+        <button
+          mat-button
+          class="full-screen-btn"
+          [ngClass]="(runsTableFullScreen$ | async) ? 'collapse' : 'expand'"
+          (click)="toggleFullScreen()"
+        >
+          <mat-icon
+            class="expand-collapse-icon"
+            [svgIcon]="
+              (runsTableFullScreen$ | async)
+                ? 'arrow_back_24px'
+                : 'arrow_forward_24px'
+            "
+          ></mat-icon>
+        </button>
+      </div>
     </nav>
     <div
       *ngIf="(width$ | async) > 0"
@@ -55,15 +80,22 @@ import {getSideBarWidthInPercent} from '../store/core_selectors';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LayoutContainer implements OnDestroy {
-  readonly width$: Observable<number> = this.store.select(
-    getSideBarWidthInPercent
-  );
-  private readonly ngUnsubscribe = new Subject<void>();
+  readonly runsTableFullScreen$;
+  readonly width$: Observable<number>;
+  private readonly ngUnsubscribe;
   private resizing: boolean = false;
 
   readonly MINIMUM_SIDEBAR_WIDTH_IN_PX = 75;
 
   constructor(private readonly store: Store<State>, hostElRef: ElementRef) {
+    this.runsTableFullScreen$ = this.store.select(getRunsTableFullScreen);
+    this.width$ = this.store.select(getSideBarWidthInPercent).pipe(
+      combineLatestWith(this.runsTableFullScreen$),
+      map(([percentageWidth, fullScreen]) => {
+        return fullScreen ? 100 : percentageWidth;
+      })
+    );
+    this.ngUnsubscribe = new Subject<void>();
     fromEvent<MouseEvent>(hostElRef.nativeElement, 'mousemove')
       .pipe(
         takeUntil(this.ngUnsubscribe),
@@ -114,5 +146,9 @@ export class LayoutContainer implements OnDestroy {
         widthInPercent: 20,
       })
     );
+  }
+
+  toggleFullScreen() {
+    this.store.dispatch(runsTableFullScreenToggled());
   }
 }

@@ -75,7 +75,7 @@ export function metricName(metricInfo) {
   if (tag === undefined) {
     tag = '';
   }
-  if (group === '') {
+  if (group === '' || group === '.') {
     return tag;
   }
   return group + '.' + tag;
@@ -132,7 +132,9 @@ export function hparamValueByIndex(schema, sessionGroup, hparamIndex) {
 export function metricValueByIndex(schema, sessionGroup, metricIndex) {
   const metricName = schema.metricColumns[metricIndex].metricInfo.name;
   const metricValue = metricValueByName(sessionGroup.metricValues, metricName);
-  return metricValue === undefined ? undefined : metricValue.value;
+  return metricValue === undefined || metricValue.value === 'NaN'
+    ? undefined
+    : metricValue.value;
 }
 
 // Returns sessionGroup's column value of the column with index
@@ -270,7 +272,9 @@ export function metricValueByVisibleIndex(
 ) {
   const metricName = visibleSchema.metricInfos[visibleMetricIndex].name;
   const metricValue = metricValueByName(sessionGroup.metricValues, metricName);
-  return metricValue === undefined ? undefined : metricValue.value;
+  return metricValue === undefined || metricValue.value === 'NaN'
+    ? undefined
+    : metricValue.value;
 }
 
 // DEPRECATED. Use columnValueByIndex with a schema columnIndex instead.
@@ -298,7 +302,7 @@ export function prettyPrint(value) {
     // TODO(erez):Make the precision user-configurable.
     return value.toPrecision(5);
   }
-  if (value === undefined) {
+  if (value === null || value === undefined) {
     return '';
   }
   return value.toString();

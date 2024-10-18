@@ -87,6 +87,15 @@ tf_ts_library(
     ],
 )
 
+# This is a dummy rule used as a @angular/material/checkbox/testing dependency.
+tf_ts_library(
+    name = "expect_angular_material_checkbox_testing",
+    srcs = [],
+    deps = [
+        "@npm//@angular/material",
+    ],
+)
+
 # This is a dummy rule used as a @angular/material/button dependency.
 tf_ts_library(
     name = "expect_angular_material_button",
@@ -108,6 +117,24 @@ tf_ts_library(
 # This is a dummy rule used as a @angular/material/chips dependency.
 tf_ts_library(
     name = "expect_angular_material_chips",
+    srcs = [],
+    deps = [
+        "@npm//@angular/material",
+    ],
+)
+
+# This is a dummy rule used as a @angular/material/chips/testing dependency.
+tf_ts_library(
+    name = "expect_angular_material_chips_testing",
+    srcs = [],
+    deps = [
+        "@npm//@angular/material",
+    ],
+)
+
+# This is a dummy rule used as a @angular/material/core dependency.
+tf_ts_library(
+    name = "expect_angular_material_core",
     srcs = [],
     deps = [
         "@npm//@angular/material",
@@ -240,6 +267,15 @@ tf_ts_library(
     ],
 )
 
+# This is a dummy rule used as a @angular/material/legacy-slider dependency.
+tf_ts_library(
+    name = "expect_angular_legacy_material_slider",
+    srcs = [],
+    deps = [
+        "@npm//@angular/material",
+    ],
+)
+
 # This is a dummy rule used as a @angular/material/slider dependency.
 tf_ts_library(
     name = "expect_angular_material_slider",
@@ -331,6 +367,15 @@ tf_ts_library(
 # This is a dummy rule used as a @angular/cdk/overlay dependency.
 tf_ts_library(
     name = "expect_angular_cdk_overlay",
+    srcs = [],
+    deps = [
+        "@npm//@angular/cdk",
+    ],
+)
+
+# This is a dummy rule used as a @angular/cdk/portal dependency.
+tf_ts_library(
+    name = "expect_angular_cdk_portal",
     srcs = [],
     deps = [
         "@npm//@angular/cdk",

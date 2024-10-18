@@ -27,6 +27,7 @@ import {
   TimeSelection,
 } from '../types';
 import {
+  CardFeatureOverride,
   CardMetadataMap,
   CardState,
   CardStateMap,
@@ -388,12 +389,19 @@ export function generateNextCardStepIndex(
 export function generateScalarCardMinMaxStep(
   runsToSeries: RunToSeries<PluginType.SCALARS>
 ): MinMaxStep {
-  const allData = Object.values(runsToSeries)
+  let minStep = Infinity;
+  let maxStep = -Infinity;
+
+  Object.values(runsToSeries)
     .flat()
-    .map((stepDatum) => stepDatum.step);
+    .forEach((stepDatum) => {
+      minStep = Math.min(minStep, stepDatum.step);
+      maxStep = Math.max(maxStep, stepDatum.step);
+    });
+
   return {
-    minStep: Math.min(...allData),
-    maxStep: Math.max(...allData),
+    minStep,
+    maxStep,
   };
 }
 
@@ -577,8 +585,44 @@ function getNextImageCardStepIndexFromRangeSelection(
  * @param cardState
  */
 export function getMinMaxStepFromCardState(cardState: Partial<CardState>) {
-  const {dataMinMax, userMinMax} = cardState;
-  return userMinMax || dataMinMax;
+  const {dataMinMax, userViewBox} = cardState;
+  const x = userViewBox?.x;
+  if (!x) return dataMinMax;
+
+  const minStep = x[0] < x[1] ? x[0] : x[1];
+  const maxStep = minStep === x[0] ? x[1] : x[0];
+  return {minStep: Math.ceil(minStep), maxStep: Math.floor(maxStep)};
+}
+
+export function getCardSelectionStateToBoolean(
+  cardOverrideState: CardFeatureOverride | undefined,
+  globalValue: boolean
+) {
+  switch (cardOverrideState) {
+    case CardFeatureOverride.OVERRIDE_AS_ENABLED:
+      return true;
+    case CardFeatureOverride.OVERRIDE_AS_DISABLED:
+      return false;
+    default:
+      return globalValue;
+  }
+}
+
+export function cardRangeSelectionEnabled(
+  cardStateMap: CardStateMap,
+  globalRangeSelectionEnabled: boolean,
+  linkedTimeEnabled: boolean,
+  cardId: CardId
+): boolean {
+  if (linkedTimeEnabled) {
+    return globalRangeSelectionEnabled;
+  }
+
+  const cardState = cardStateMap[cardId];
+  return getCardSelectionStateToBoolean(
+    cardState?.rangeSelectionOverride,
+    globalRangeSelectionEnabled
+  );
 }
 
 export const TEST_ONLY = {

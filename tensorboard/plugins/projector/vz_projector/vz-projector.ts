@@ -588,7 +588,8 @@ class Projector
     }
     if (this.selectedPointIndices.length === 0) {
       if (hoverText) {
-        this.statusBar.innerText = hoverText!;
+        this.statusBar.innerText = hoverText;
+        this.statusBar.style.display = null!;
       } else {
         this.statusBar.style.display = 'none';
       }
@@ -611,6 +612,8 @@ class Projector
       this.selectedPointIndices.length + neighborsOfFirstPoint.length;
     this.statusBar.innerText = `Selected ${totalNumPoints} points`;
     if (totalNumPoints > 0) {
+      this.statusBar.style.display = null!;
+    } else {
       this.statusBar.style.display = 'none';
     }
   }
@@ -650,6 +653,7 @@ class Projector
     state.tSNEIteration = this.dataSet.tSNEIteration;
     state.selectedPoints = this.selectedPointIndices;
     state.filteredPoints = this.dataSetFilterIndices!;
+    state.shuffledDataIndices = this.dataSet.shuffledDataIndices;
     this.projectorScatterPlotAdapter.populateBookmarkFromUI(state);
     state.selectedColorOptionName = this.dataPanel.selectedColorOptionName;
     state.forceCategoricalColoring = this.dataPanel.forceCategoricalColoring;
@@ -674,9 +678,13 @@ class Projector
       const point = this.dataSet.points[i];
       const projection = state.projections[i];
       const keys = Object.keys(projection);
+      point.projections = {};
       for (let j = 0; j < keys.length; ++j) {
         point.projections[keys[j]] = projection[keys[j]];
       }
+    }
+    if (state.shuffledDataIndices) {
+      this.dataSet.shuffledDataIndices = state.shuffledDataIndices;
     }
     this.dataSet.hasTSNERun = state.selectedProjection === 'tsne';
     this.dataSet.tSNEIteration = state.tSNEIteration;

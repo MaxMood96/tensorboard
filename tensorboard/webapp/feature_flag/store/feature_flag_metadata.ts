@@ -73,16 +73,6 @@ export const FeatureFlagMetadataMap: FeatureFlagMetadataMapType<FeatureFlags> =
       queryParamOverride: 'experimentalPlugin',
       parseValue: parseStringArray,
     },
-    enabledLinkedTime: {
-      defaultValue: true,
-      queryParamOverride: 'enableLinkedTime',
-      parseValue: parseBoolean,
-    },
-    enabledScalarDataTable: {
-      defaultValue: true,
-      queryParamOverride: 'enableDataTable',
-      parseValue: parseBoolean,
-    },
     forceSvg: {
       defaultValue: false,
       queryParamOverride: 'forceSVG',
@@ -110,24 +100,34 @@ export const FeatureFlagMetadataMap: FeatureFlagMetadataMapType<FeatureFlags> =
       defaultValue: true,
       queryParamOverride: null,
     },
-    enableShowFlags: {
-      defaultValue: false,
+    showFlags: {
+      defaultValue: undefined,
       queryParamOverride: 'showFlags',
-      parseValue: parseBoolean,
-    },
-    allowRangeSelection: {
-      defaultValue: true,
-      queryParamOverride: 'allowRangeSelection',
-      parseValue: parseBoolean,
-    },
-    enabledProspectiveFob: {
-      defaultValue: true,
-      queryParamOverride: 'enableProspectiveFob',
-      parseValue: parseBoolean,
+      parseValue: (str) => str,
     },
     enableScalarColumnCustomization: {
       defaultValue: false,
       queryParamOverride: 'enableScalarColumnCustomization',
+      parseValue: parseBoolean,
+    },
+    enableScalarColumnContextMenus: {
+      defaultValue: false,
+      queryParamOverride: 'enableScalarColumnContextMenus',
+      parseValue: parseBoolean,
+    },
+    enableSuggestedCards: {
+      defaultValue: false,
+      queryParamOverride: 'enableSuggestedCards',
+      parseValue: parseBoolean,
+    },
+    enableGlobalPins: {
+      defaultValue: true,
+      queryParamOverride: 'enableGlobalPins',
+      parseValue: parseBoolean,
+    },
+    enableColorByExperiment: {
+      defaultValue: false,
+      queryParamOverride: 'enableColorByExperiment',
       parseValue: parseBoolean,
     },
   };

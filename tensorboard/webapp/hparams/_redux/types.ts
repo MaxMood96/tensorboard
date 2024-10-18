@@ -13,28 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 import {
+  ColumnHeader,
   DiscreteFilter,
   HparamSpec,
   IntervalFilter,
-  MetricSpec,
+  SessionGroup,
 } from '../_types';
 
-export interface HparamsMetricsAndFilters {
-  hparam: {
-    specs: HparamSpec[];
-    defaultFilters: Map<string, DiscreteFilter | IntervalFilter>;
-  };
-  metric: {
-    specs: MetricSpec[];
-    defaultFilters: Map<string, IntervalFilter>;
-  };
-}
-
-export type ExperimentToHparams = Record<
-  // experiemnt Id.
-  string,
-  HparamsMetricsAndFilters
->;
+export type HparamFilter = DiscreteFilter | IntervalFilter;
+export type MetricFilter = IntervalFilter;
 
 /**
  * Key used to namespace the hparams reducer.
@@ -42,26 +29,16 @@ export type ExperimentToHparams = Record<
 export const HPARAMS_FEATURE_KEY = 'hparams';
 
 export interface HparamsState {
-  specs: ExperimentToHparams;
-  /**
-   * RATIONALE: we do not use the NamespaceContextedState because of the following reasons.
-   * - RunsTable which uses the state renders both on the dashboard view and the
-   *     experiments list view.
-   * - For the RunsTable on the list view, we have to key the state by an experimentId
-   *    since we cannot have filter for multiple experiments in the view mutate the same
-   *    object.
-   * - For the dashboard view that supports comparison, we need to remember filter state
-   *    when viewing multiple experiments separate from a single version one; while we can
-   *    technically have a reasonable UX, it makes things more complex.
-   * - We can use NamespaceContextedState to separate single experiment filter selection to be
-   *    separate for the list and the dashboard views, but them shared is not too bad.
-   */
-  filters: {
-    [id: string]: {
-      hparams: Map<string, DiscreteFilter | IntervalFilter>;
-      metrics: Map<string, IntervalFilter>;
-    };
+  dashboardHparamSpecs: HparamSpec[];
+  dashboardSessionGroups: SessionGroup[];
+  dashboardFilters: {
+    hparams: Map<string, HparamFilter>;
+    metrics: Map<string, MetricFilter>;
   };
+  dashboardDisplayedHparamColumns: ColumnHeader[];
+  // 0 means load "all".
+  numDashboardHparamsToLoad: number;
+  numDashboardHparamsLoaded: number;
 }
 
 export interface State {

@@ -69,7 +69,7 @@ message Experiment {
   repeated MetricInfo metric_infos = 5;
 }
 
-// NEXT_TAG: 7
+// NEXT_TAG: 8
 message HParamInfo {
   // An id for the hyperparameter.
   string name = 1;
@@ -88,8 +88,7 @@ message HParamInfo {
   // every instance of this hyperparameter will hold a value from this set. It
   // is used by the UI to allow filtering so that only session groups (see
   // below) whose associated hyperparameter value "passes" the filter are
-  // displayed. If this is not populated, the domain is assumed to be the
-  // entire domain of the type of the hyperparameter.
+  // displayed. If this is not populated, the domain is assumed to be empty.
   oneof domain {
     // A discrete set of the values this hyperparameter can hold.
     google.protobuf.ListValue domain_discrete = 5;
@@ -97,6 +96,11 @@ message HParamInfo {
     // hyperparameter are taken.
     Interval domain_interval = 6;
   }
+
+  // Describes whether there are two or more known values for the HParam
+  // in the specified Experiment. HParams for which this is true are made more
+  // prominent or easier to discover in the UI.
+  bool differs = 7;
 }
 
 enum DataType {
@@ -250,17 +254,24 @@ enum Status {
 
 // Parameters for a GetExperiment API call.
 // Each experiment is scoped by a unique global id.
-// NEXT_TAG: 2
+// NEXT_TAG: 4
 message GetExperimentRequest {
   // REQUIRED
   string experiment_name = 1;
+
+  // Whether to fetch metrics and include them in the results. Defaults to true.
+  optional bool include_metrics = 2;
+
+  // Number of hyperparameter metadata to include in the result. If zero, all
+  // hyperparameter metadata will be returned.
+  optional int32 hparams_limit = 3;
 }
 
 // Parameters for a ListSessionGroups API call.
 // Computes a list of the current session groups allowing for filtering and
 // sorting by metrics and hyperparameter values. Returns a "slice" of
 // that list specified by start_index and slice_size.
-// NEXT_TAG: 8
+// NEXT_TAG: 9
 message ListSessionGroupsRequest {
   string experiment_name = 6;
 
@@ -310,11 +321,14 @@ message ListSessionGroupsRequest {
   // sorted and filtered by the parameters above (if start_index > total_size
   // no session groups are returned).
   int32 slice_size = 5;
+
+  // Whether to fetch metrics and include them in the results. Defaults to true.
+  optional bool include_metrics = 8;
 }
 
-// Defines parmeters for a ListSessionGroupsRequest for a specific column.
+// Defines parameters for a ListSessionGroupsRequest for a specific column.
 // See the comment for "ListSessionGroupsRequest" above for more details.
-// NEXT_TAG: 9
+// NEXT_TAG: 10
 message ColParams {
   oneof name {
     MetricName metric = 1;
@@ -363,6 +377,12 @@ message ColParams {
   // Specifies whether to exclude session groups whose column value is missing
   // from the response.
   bool exclude_missing_values = 8;
+
+  // Specifies whether to include the values for the field in the operation
+  // result. Defaults to True.
+  // Note: Hparams and metrics that do not appear in any `ColParams` in a
+  // request will also not be included in the result.
+  optional bool include_in_result = 9;
 }
 
 enum SortOrder {

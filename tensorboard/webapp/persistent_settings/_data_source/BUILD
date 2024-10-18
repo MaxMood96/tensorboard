@@ -11,6 +11,7 @@ tf_ng_module(
     deps = [
         ":types",
         "//tensorboard/webapp/metrics:types",
+        "//tensorboard/webapp/widgets/data_table:types",
         "@npm//@angular/core",
         "@npm//@ngrx/store",
         "@npm//rxjs",
@@ -24,6 +25,7 @@ tf_ng_module(
     ],
     deps = [
         "//tensorboard/webapp/metrics:types",
+        "//tensorboard/webapp/widgets/data_table:types",
     ],
 )
 
@@ -53,6 +55,7 @@ tf_ng_module(
         ":types",
         "//tensorboard/webapp/angular:expect_angular_core_testing",
         "//tensorboard/webapp/metrics:types",
+        "//tensorboard/webapp/widgets/data_table:types",
         "@npm//@angular/core",
         "@npm//@types/jasmine",
         "@npm//rxjs",

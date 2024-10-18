@@ -1,4 +1,4 @@
-load("//tensorboard/defs:defs.bzl", "tf_ng_module", "tf_sass_binary", "tf_ts_library")
+load("//tensorboard/defs:defs.bzl", "tf_ng_module", "tf_sass_binary")
 
 package(default_visibility = ["//tensorboard:internal"])
 
@@ -6,8 +6,7 @@ licenses(["notice"])
 
 tf_sass_binary(
     name = "style",
-    src = "feature_flag_page_component.scss",
-    strict_deps = False,
+    src = "feature_flag_dialog_component.scss",
     deps = [
         "//tensorboard/webapp:angular_material_sass_deps",
         "//tensorboard/webapp/theme",
@@ -21,8 +20,9 @@ tf_ng_module(
         "feature_flag_modal_trigger_module.ts",
     ],
     deps = [
-        ":views",
+        ":feature_flag_dialog",
         "//tensorboard/webapp:app_state",
+        "//tensorboard/webapp/angular:expect_angular_cdk_overlay",
         "//tensorboard/webapp/angular:expect_angular_material_dialog",
         "//tensorboard/webapp/feature_flag/actions",
         "//tensorboard/webapp/feature_flag/store",
@@ -34,16 +34,16 @@ tf_ng_module(
 )
 
 tf_ng_module(
-    name = "views",
+    name = "feature_flag_dialog",
     srcs = [
-        "feature_flag_module.ts",
-        "feature_flag_page_component.ts",
-        "feature_flag_page_container.ts",
+        "feature_flag_dialog_component.ts",
+        "feature_flag_dialog_container.ts",
+        "feature_flag_dialog_module.ts",
         "types.ts",
     ],
     assets = [
         ":style",
-        "feature_flag_page_component.ng.html",
+        "feature_flag_dialog_component.ng.html",
     ],
     deps = [
         "//tensorboard/webapp:app_state",
@@ -61,16 +61,16 @@ tf_ng_module(
     ],
 )
 
-tf_ts_library(
-    name = "views_test",
+tf_ng_module(
+    name = "views_test_lib",
     testonly = True,
     srcs = [
+        "feature_flag_dialog_test.ts",
         "feature_flag_modal_trigger_container_test.ts",
-        "feature_flag_page_test.ts",
     ],
     deps = [
+        ":feature_flag_dialog",
         ":feature_flag_modal_trigger",
-        ":views",
         "//tensorboard/webapp:app_state",
         "//tensorboard/webapp/angular:expect_angular_cdk_testing",
         "//tensorboard/webapp/angular:expect_angular_cdk_testing_testbed",

@@ -13,223 +13,177 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+import {ColumnHeaderType} from '../../widgets/data_table/types';
+import {DomainType} from '../types';
 import * as selectors from './hparams_selectors';
 import {
-  buildDiscreteFilter,
-  buildFilterState,
   buildHparamSpec,
   buildHparamsState,
-  buildIntervalFilter,
-  buildMetricSpec,
-  buildSpecs,
   buildStateFromHparamsState,
 } from './testing';
 
 describe('hparams/_redux/hparams_selectors_test', () => {
-  describe('#getHparamFilterMap', () => {
-    beforeEach(() => {
-      // Clear the memoization.
-      selectors.getHparamFilterMap.release();
-    });
-
-    it('returns default hparam filter map', () => {
+  describe('#getDashboardHparamSpecs', () => {
+    it('returns dashboard specs', () => {
       const state = buildStateFromHparamsState(
-        buildHparamsState(
-          buildSpecs('foo', {
-            hparam: {
-              specs: [buildHparamSpec({name: 'optimizer'})],
-              defaultFilters: new Map([
-                [
-                  'optimizer',
-                  buildDiscreteFilter({
-                    filterValues: ['a', 'b', 'c'],
-                  }),
-                ],
-              ]),
-            },
-          })
-        )
+        buildHparamsState({
+          dashboardHparamSpecs: [buildHparamSpec({name: 'foo'})],
+        })
       );
 
-      expect(selectors.getHparamFilterMap(state, ['foo'])).toEqual(
-        new Map([
-          ['optimizer', buildDiscreteFilter({filterValues: ['a', 'b', 'c']})],
-        ])
-      );
-    });
-
-    it('returns custom hparam filter map', () => {
-      const state = buildStateFromHparamsState(
-        buildHparamsState(
-          buildSpecs('foo', {
-            hparam: {
-              specs: [buildHparamSpec({name: 'optimizer'})],
-              defaultFilters: new Map([
-                [
-                  'optimizer',
-                  buildDiscreteFilter({
-                    filterValues: ['a', 'b', 'c'],
-                  }),
-                ],
-              ]),
-            },
-          }),
-          buildFilterState(['foo'], {
-            hparams: new Map([
-              [
-                'optimizer',
-                buildDiscreteFilter({
-                  filterValues: ['d', 'e', 'f'],
-                }),
-              ],
-            ]),
-          })
-        )
-      );
-
-      expect(selectors.getHparamFilterMap(state, ['foo'])).toEqual(
-        new Map([
-          [
-            'optimizer',
-            buildDiscreteFilter({
-              filterValues: ['d', 'e', 'f'],
-            }),
-          ],
-        ])
-      );
-    });
-
-    it('returns empty map for an unknown exp', () => {
-      const state = buildStateFromHparamsState(
-        buildHparamsState(
-          buildSpecs('foo', {
-            hparam: {
-              specs: [buildHparamSpec({name: 'optimizer'})],
-              defaultFilters: new Map([
-                ['optimizer', buildDiscreteFilter({filterValues: ['a']})],
-              ]),
-            },
-          })
-        )
-      );
-
-      expect(selectors.getHparamFilterMap(state, ['bar'])).toEqual(new Map());
+      expect(selectors.getDashboardHparamSpecs(state)).toEqual([
+        buildHparamSpec({name: 'foo'}),
+      ]);
     });
   });
 
-  describe('#getMetricFilterMap', () => {
-    beforeEach(() => {
-      // Clear the memoization.
-      selectors.getMetricFilterMap.release();
-    });
-
-    it('returns default metric filter map', () => {
+  describe('#getDashboardSessionGroups', () => {
+    it('returns dashboard session groups', () => {
       const state = buildStateFromHparamsState(
-        buildHparamsState(
-          buildSpecs('foo', {
-            metric: {
-              specs: [buildMetricSpec({tag: 'acc'})],
-              defaultFilters: new Map([
-                [
-                  'acc',
-                  buildIntervalFilter({
-                    filterLowerValue: 0,
-                    filterUpperValue: 1,
-                  }),
-                ],
-              ]),
+        buildHparamsState({
+          dashboardSessionGroups: [
+            {
+              name: 'SessionGroup1',
+              hparams: {hparam1: 'value1'},
+              sessions: [],
             },
-          })
-        )
+          ],
+        })
       );
+      expect(selectors.getDashboardSessionGroups(state)).toEqual([
+        {name: 'SessionGroup1', hparams: {hparam1: 'value1'}, sessions: []},
+      ]);
+    });
+  });
 
-      expect(selectors.getMetricFilterMap(state, ['foo'])).toEqual(
+  describe('#getDashboardDefaultHparamFilters', () => {
+    it('generates default filters for all hparam specs', () => {
+      const state = buildStateFromHparamsState(
+        buildHparamsState({
+          dashboardHparamSpecs: [
+            buildHparamSpec({
+              name: 'interval hparam',
+              domain: {
+                type: DomainType.INTERVAL,
+                minValue: 2,
+                maxValue: 5,
+              },
+            }),
+            buildHparamSpec({
+              name: 'discrete hparam',
+              domain: {
+                type: DomainType.DISCRETE,
+                values: [2, 4, 6, 8],
+              },
+            }),
+          ],
+        })
+      );
+      expect(selectors.getDashboardDefaultHparamFilters(state)).toEqual(
         new Map([
           [
-            'acc',
-            buildIntervalFilter({
-              filterLowerValue: 0,
-              filterUpperValue: 1,
-            }),
+            'interval hparam',
+            {
+              type: DomainType.INTERVAL,
+              includeUndefined: true,
+              minValue: 2,
+              maxValue: 5,
+              filterLowerValue: 2,
+              filterUpperValue: 5,
+            },
+          ],
+          [
+            'discrete hparam',
+            {
+              type: DomainType.DISCRETE,
+              includeUndefined: true,
+              possibleValues: [2, 4, 6, 8],
+              filterValues: [2, 4, 6, 8],
+            },
           ],
         ])
       );
     });
+  });
 
-    it('returns custom metric filter map', () => {
+  describe('#getDashboardDisplayedHparamColumns', () => {
+    it('returns no columns if no hparam specs', () => {
       const state = buildStateFromHparamsState(
-        buildHparamsState(
-          buildSpecs('foo', {
-            metric: {
-              specs: [buildMetricSpec({tag: 'acc'})],
-              defaultFilters: new Map([
-                [
-                  'acc',
-                  buildIntervalFilter({
-                    filterLowerValue: 0,
-                    filterUpperValue: 1,
-                  }),
-                ],
-              ]),
+        buildHparamsState({
+          dashboardHparamSpecs: [],
+          dashboardDisplayedHparamColumns: [
+            {
+              type: ColumnHeaderType.HPARAM,
+              name: 'conv_layers',
+              displayName: 'Conv Layers',
+              enabled: true,
             },
-          }),
-          buildFilterState(['foo'], {
-            metrics: new Map([
-              [
-                'acc',
-                buildIntervalFilter({
-                  filterLowerValue: 0,
-                  filterUpperValue: 0.1,
-                }),
-              ],
-            ]),
-          })
-        )
-      );
-      expect(selectors.getMetricFilterMap(state, ['foo'])).toEqual(
-        new Map([
-          [
-            'acc',
-            buildIntervalFilter({
-              filterLowerValue: 0,
-              filterUpperValue: 0.1,
-            }),
+            {
+              type: ColumnHeaderType.HPARAM,
+              name: 'conv_kernel_size',
+              displayName: 'Conv Kernel Size',
+              enabled: true,
+            },
           ],
-        ])
+        })
       );
+
+      expect(selectors.getDashboardDisplayedHparamColumns(state)).toEqual([]);
     });
 
-    it('returns empty map for an unknown exp', () => {
+    it('returns only hparam columns that have specs', () => {
       const state = buildStateFromHparamsState(
-        buildHparamsState(
-          buildSpecs('foo', {
-            metric: {
-              specs: [buildMetricSpec({tag: 'acc'})],
-              defaultFilters: new Map([
-                [
-                  'acc',
-                  buildIntervalFilter({
-                    filterLowerValue: 0,
-                    filterUpperValue: 1,
-                  }),
-                ],
-              ]),
+        buildHparamsState({
+          dashboardHparamSpecs: [buildHparamSpec({name: 'conv_layers'})],
+          dashboardDisplayedHparamColumns: [
+            {
+              type: ColumnHeaderType.HPARAM,
+              name: 'conv_layers',
+              displayName: 'Conv Layers',
+              enabled: true,
             },
-          }),
-          buildFilterState(['foo'], {
-            metrics: new Map([
-              [
-                'acc',
-                buildIntervalFilter({
-                  filterLowerValue: 0,
-                  filterUpperValue: 0.1,
-                }),
-              ],
-            ]),
-          })
-        )
+            {
+              type: ColumnHeaderType.HPARAM,
+              name: 'conv_kernel_size',
+              displayName: 'Conv Kernel Size',
+              enabled: true,
+            },
+          ],
+        })
       );
-      expect(selectors.getMetricFilterMap(state, ['bar'])).toEqual(new Map());
+
+      expect(selectors.getDashboardDisplayedHparamColumns(state)).toEqual([
+        {
+          type: ColumnHeaderType.HPARAM,
+          name: 'conv_layers',
+          displayName: 'Conv Layers',
+          enabled: true,
+        },
+      ]);
+    });
+  });
+
+  describe('#getNumDashboardHparamsToLoad', () => {
+    it('returns dashboard specs', () => {
+      const state = buildStateFromHparamsState(
+        buildHparamsState({
+          numDashboardHparamsToLoad: 5,
+        })
+      );
+
+      expect(selectors.getNumDashboardHparamsToLoad(state)).toEqual(5);
+    });
+  });
+
+  describe('#getNumDashboardHparamsToLoad', () => {
+    it('returns dashboard specs', () => {
+      const state = buildStateFromHparamsState(
+        buildHparamsState({
+          numDashboardHparamsLoaded: 22,
+        })
+      );
+
+      expect(selectors.getNumDashboardHparamsLoaded(state)).toEqual(22);
     });
   });
 });

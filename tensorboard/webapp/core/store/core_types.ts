@@ -38,6 +38,9 @@ export interface CoreState {
   polymerInteropRunSelection: Set<RunId>;
   // Number between 0 and 100.
   sideBarWidthInPercent: number;
+  // Whether the runs table should occupy the full screen.
+  runsTableFullScreen: boolean;
+  unknownQueryParams: Record<string, string>;
 }
 
 /*
@@ -99,4 +102,9 @@ export const initialState: CoreState = {
   polymerInteropRuns: [],
   polymerInteropRunSelection: new Set(),
   sideBarWidthInPercent: 20,
+  runsTableFullScreen: false,
+  // Query parameters not recognized by TensorBoard will be stored here.
+  // This is necessary so that they can be readded to the query params
+  // when the application serializes itself in the deeplink_provider.
+  unknownQueryParams: {},
 };

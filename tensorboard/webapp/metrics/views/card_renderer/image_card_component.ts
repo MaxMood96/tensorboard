@@ -25,9 +25,10 @@ import {DataLoadState} from '../../../types/data';
 import {RunColorScale} from '../../../types/ui';
 import {TimeSelectionView} from './utils';
 
-const TICK_WIDTH = 14; // In px
+const TICK_WIDTH = 12; // In px
 
 @Component({
+  standalone: false,
   selector: 'image-card-component',
   templateUrl: 'image_card_component.ng.html',
   styleUrls: ['image_card_component.css'],
@@ -70,12 +71,8 @@ export class ImageCardComponent {
     return `contrast(${contrastPercent}%) brightness(${brightnessScale})`;
   }
 
-  onSliderInput($event: any) {
-    // Angular Material Slider's MatSliderChange has a loose `number | null`
-    // type for 'value'. However, it's actual implementation can only emit a
-    // `number` on input events.
-    // https://github.com/angular/components/blob/master/src/material/slider/slider.ts
-    this.stepIndexChange.emit($event.value as number);
+  onSliderInput(value: number) {
+    this.stepIndexChange.emit(value);
   }
 
   changeDistinct(change: SimpleChange) {

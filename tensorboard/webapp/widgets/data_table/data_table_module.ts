@@ -16,12 +16,39 @@ limitations under the License.
 import {CommonModule} from '@angular/common';
 import {NgModule} from '@angular/core';
 import {MatIconModule} from '@angular/material/icon';
+import {MatButtonModule} from '@angular/material/button';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {DataTableComponent} from './data_table_component';
+import {HeaderCellComponent} from './header_cell_component';
 import {DataTableHeaderModule} from './data_table_header_module';
+import {ContentCellComponent} from './content_cell_component';
+import {ContentRowComponent} from './content_row_component';
+import {ColumnSelectorModule} from './column_selector_module';
+import {FilterDialogModule} from './filter_dialog_module';
+import {ContextMenuModule} from './context_menu_module';
 
 @NgModule({
-  declarations: [DataTableComponent],
-  exports: [DataTableComponent],
-  imports: [CommonModule, MatIconModule, DataTableHeaderModule],
+  declarations: [
+    ContentCellComponent,
+    ContentRowComponent,
+    DataTableComponent,
+    HeaderCellComponent,
+  ],
+  exports: [
+    ContentCellComponent,
+    ContentRowComponent,
+    DataTableComponent,
+    HeaderCellComponent,
+  ],
+  imports: [
+    CommonModule,
+    MatIconModule,
+    MatButtonModule,
+    MatProgressSpinnerModule,
+    DataTableHeaderModule,
+    ColumnSelectorModule,
+    FilterDialogModule,
+    ContextMenuModule,
+  ],
 })
 export class DataTableModule {}

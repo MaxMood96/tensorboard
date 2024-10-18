@@ -44,7 +44,6 @@ limitations under the License.
       </button>
       <button
         mat-icon-button
-        class="pin-button"
         i18n-aria-label="A button to pin a card."
         aria-label="Pin card"
         [attr.title]="isPinned ? 'Unpin card' : 'Pin card'"
@@ -62,7 +61,7 @@ limitations under the License.
         (click)="onFullSizeToggle.emit()"
       >
         <mat-icon
-          [svgIcon]="showFullSize ? 'fullscreen_exit_24px' : 'fullscreen_24px'"
+          [svgIcon]="showFullWidth ? 'fullscreen_exit_24px' : 'fullscreen_24px'"
         ></mat-icon>
       </button>
       <!-- overflow menu cannot use mat-tooltip since it interferes with the mat-menu. -->
@@ -93,10 +92,19 @@ limitations under the License.
           <mat-icon svgIcon="get_app_24px"></mat-icon>
           <span>Download data</span>
         </button>
+        <button
+          *ngIf="columnCustomizationEnabled"
+          mat-menu-item
+          (click)="openTableEditMenu()"
+          aria-label="Open menu to edit data table columns"
+        >
+          <mat-icon svgIcon="edit_24px"></mat-icon>
+          <span>Edit Table Columns</span>
+        </button>
       </mat-menu>
     </span>
   </div>
-  <div class="chart-container">
+  <div #chartContainer class="chart-container">
     <mat-spinner
       diameter="18"
       *ngIf="loadState === DataLoadState.LOADING"
@@ -112,6 +120,7 @@ limitations under the License.
       [ignoreYOutliers]="ignoreOutliers"
       [tooltipTemplate]="tooltip"
       [useDarkMode]="useDarkMode"
+      [userViewBox]="userViewBox"
       (onViewBoxOverridden)="isViewBoxOverridden = $event"
       (viewBoxChanged)="onLineChartZoom.emit($event)"
       [customVisTemplate]="lineChartCustomVis"
@@ -175,7 +184,13 @@ limitations under the License.
   </div>
 </div>
 <ng-container *ngIf="showDataTable()">
-  <div class="data-table-container">
+  <div
+    #dataTableContainer
+    [ngClass]="{
+      'data-table-container': true,
+      'expanded': cardState!.tableExpanded
+    }"
+  >
     <scalar-card-data-table
       [chartMetadataMap]="chartMetadataMap"
       [dataSeries]="dataSeries"
@@ -183,11 +198,37 @@ limitations under the License.
       [columnHeaders]="columnHeaders"
       [sortingInfo]="sortingInfo"
       [columnCustomizationEnabled]="columnCustomizationEnabled"
+      [columnContextMenusEnabled]="columnContextMenusEnabled"
       [smoothingEnabled]="smoothingEnabled"
+      [columnFilters]="columnFilters"
+      [runToHparamMap]="runToHparamMap"
+      [selectableColumns]="selectableColumns"
+      [numColumnsLoaded]="numColumnsLoaded"
+      [numColumnsToLoad]="numColumnsToLoad"
       (sortDataBy)="sortDataBy($event)"
-      (orderColumns)="reorderColumnHeaders.emit($event)"
+      (editColumnHeaders)="editColumnHeaders.emit($event)"
+      (addColumn)="addColumn.emit($event)"
+      (removeColumn)="removeColumn.emit($event)"
+      (hideColumn)="hideColumn.emit($event)"
+      (addFilter)="addFilter.emit($event)"
+      (loadAllColumns)="loadAllColumns.emit()"
     >
     </scalar-card-data-table>
+  </div>
+  <div class="bottom-area">
+    <button
+      *ngIf="canExpandTable()"
+      mat-icon-button
+      i18n-aria-label="Expand Table"
+      class="expand-button"
+      aria-label="Expand Table"
+      [title]="shouldExpandTable() ? 'Expand Table' : 'Collapse Table'"
+      (click)="toggleTableExpanded()"
+    >
+      <mat-icon
+        [svgIcon]="shouldExpandTable() ? 'expand_more_24px' : 'expand_less_24px'"
+      ></mat-icon>
+    </button>
   </div>
 </ng-container>
 <ng-template
@@ -244,7 +285,6 @@ limitations under the License.
       [minMaxHorizontalViewExtend]="viewExtent.x"
       [minMaxStep]="minMaxStep"
       [axisSize]="domDim.width"
-      [isProspectiveFobFeatureEnabled]="isProspectiveFobFeatureEnabled"
       (onTimeSelectionChanged)="onTimeSelectionChanged.emit($event)"
       (onTimeSelectionToggled)="onFobRemoved()"
     ></scalar-card-fob-controller>

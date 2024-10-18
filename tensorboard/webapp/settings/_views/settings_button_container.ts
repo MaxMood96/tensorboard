@@ -18,6 +18,7 @@ import {getSettingsLoadState} from '../_redux/settings_selectors';
 import {State} from '../_redux/settings_types';
 
 @Component({
+  standalone: false,
   selector: 'settings-button',
   template: `
     <settings-button-component
@@ -26,7 +27,9 @@ import {State} from '../_redux/settings_types';
   `,
 })
 export class SettingsButtonContainer {
-  readonly settingsLoadState$ = this.store.select(getSettingsLoadState);
+  readonly settingsLoadState$;
 
-  constructor(private store: Store<State>) {}
+  constructor(private store: Store<State>) {
+    this.settingsLoadState$ = this.store.select(getSettingsLoadState);
+  }
 }

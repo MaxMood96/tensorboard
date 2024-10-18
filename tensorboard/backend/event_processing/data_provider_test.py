@@ -83,7 +83,7 @@ class MultiplexerDataProviderTest(tf.test.TestCase):
                 ("very smooth", (0.0, 0.25, 0.5, 0.75, 1.0), "uniform"),
                 ("very smoothn't", (0.0, 0.01, 0.99, 1.0), "bimodal"),
             ]
-            for (description, distribution, name) in data:
+            for description, distribution, name in data:
                 tensor = tf.constant([distribution], dtype=tf.float64)
                 for i in range(1, 11):
                     histogram_summary.histogram(
@@ -97,7 +97,7 @@ class MultiplexerDataProviderTest(tf.test.TestCase):
                 ("blue", (1, 91, 158), "bottom-left"),
                 ("yellow", (239, 220, 111), "bottom-right"),
             ]
-            for (name, color, description) in data:
+            for name, color, description in data:
                 image_1x1 = tf.constant([[[color]]], dtype=tf.uint8)
                 for i in range(1, 11):
                     # Use a non-monotonic sequence of sample sizes to
@@ -289,7 +289,7 @@ class MultiplexerDataProviderTest(tf.test.TestCase):
             for tag in result[run]:
                 tensor_events = multiplexer.Tensors(run, tag)
                 self.assertLen(result[run][tag], len(tensor_events))
-                for (datum, event) in zip(result[run][tag], tensor_events):
+                for datum, event in zip(result[run][tag], tensor_events):
                     self.assertEqual(datum.step, event.step)
                     self.assertEqual(datum.wall_time, event.wall_time)
                     self.assertEqual(
@@ -327,6 +327,42 @@ class MultiplexerDataProviderTest(tf.test.TestCase):
                 run_tag_filter=run_tag_filter,
                 downsample=100,
             )
+
+    def test_read_last_scalars(self):
+        multiplexer = self.create_multiplexer()
+        provider = data_provider.MultiplexerDataProvider(
+            multiplexer, self.logdir
+        )
+
+        run_tag_filter = base_provider.RunTagFilter(
+            runs=["waves", "polynomials", "unicorns"],
+            tags=["sine", "square", "cube", "iridescence"],
+        )
+        result = provider.read_last_scalars(
+            self.ctx,
+            experiment_id="unused",
+            plugin_name=scalar_metadata.PLUGIN_NAME,
+            run_tag_filter=run_tag_filter,
+        )
+
+        self.assertCountEqual(result.keys(), ["polynomials", "waves"])
+        self.assertCountEqual(result["polynomials"].keys(), ["square", "cube"])
+        self.assertCountEqual(result["waves"].keys(), ["square", "sine"])
+        for run in result:
+            for tag in result[run]:
+                events = multiplexer.Tensors(run, tag)
+                if events:
+                    last_event = events[-1]
+                    datum = result[run][tag]
+                    self.assertIsInstance(datum, base_provider.ScalarDatum)
+                    self.assertEqual(datum.step, last_event.step)
+                    self.assertEqual(datum.wall_time, last_event.wall_time)
+                    self.assertEqual(
+                        datum.value,
+                        tensor_util.make_ndarray(
+                            last_event.tensor_proto
+                        ).item(),
+                    )
 
     def test_list_tensors_all(self):
         provider = self.create_provider()
@@ -388,7 +424,7 @@ class MultiplexerDataProviderTest(tf.test.TestCase):
             for tag in result[run]:
                 tensor_events = multiplexer.Tensors(run, tag)
                 self.assertLen(result[run][tag], len(tensor_events))
-                for (datum, event) in zip(result[run][tag], tensor_events):
+                for datum, event in zip(result[run][tag], tensor_events):
                     self.assertEqual(datum.step, event.step)
                     self.assertEqual(datum.wall_time, event.wall_time)
                     np.testing.assert_equal(

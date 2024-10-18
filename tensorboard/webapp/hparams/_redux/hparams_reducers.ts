@@ -13,343 +13,164 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 import {Action, ActionReducer, createReducer, on} from '@ngrx/store';
-import {fetchRunsSucceeded} from '../../runs/actions';
-import {
-  DiscreteFilter,
-  DiscreteHparamValue,
-  DiscreteHparamValues,
-  DomainType,
-  IntervalFilter,
-} from '../_types';
+import {dataTableUtils} from '../../widgets/data_table/utils';
+import {persistentSettingsLoaded} from '../../persistent_settings';
+import {Side} from '../../widgets/data_table/types';
 import * as actions from './hparams_actions';
-import {ExperimentToHparams, HparamsState} from './types';
-import {
-  combineDefaultHparamFilters,
-  combineDefaultMetricFilters,
-  getIdFromExperimentIds,
-} from './utils';
+import {HparamsState} from './types';
 
-const initialState: HparamsState = {specs: {}, filters: {}};
+const INITIAL_NUM_HPARAMS_TO_LOAD = 1000;
+
+const initialState: HparamsState = {
+  dashboardHparamSpecs: [],
+  dashboardSessionGroups: [],
+  dashboardFilters: {
+    hparams: new Map(),
+    metrics: new Map(),
+  },
+  dashboardDisplayedHparamColumns: [],
+  numDashboardHparamsToLoad: INITIAL_NUM_HPARAMS_TO_LOAD,
+  numDashboardHparamsLoaded: 0,
+};
 
 const reducer: ActionReducer<HparamsState, Action> = createReducer(
   initialState,
-  on(actions.hparamsDiscreteHparamFilterChanged, (state, action) => {
-    const {experimentIds, hparamName, filterValues, includeUndefined} = action;
-    const id = getIdFromExperimentIds(experimentIds);
-    const filter = state.filters[id] ?? {
-      hparams: new Map<string, DiscreteFilter | IntervalFilter>(),
-    };
-
-    const existingFilter = filter.hparams.get(hparamName);
-    if (existingFilter && existingFilter.type !== DomainType.DISCRETE) {
-      throw new RangeError(
-        `New discrete filter of ${hparamName} conflicts existing filter of ` +
-          DomainType[existingFilter.type]
-      );
-    }
-
-    const defaultFilter = combineDefaultHparamFilters(
-      experimentIds
-        .filter((eid) => {
-          return Boolean(state.specs[eid]);
-        })
-        .map((eid) => {
-          return state.specs[eid].hparam.defaultFilters;
-        })
-    ).get(hparamName);
-
-    if (!defaultFilter) {
-      throw new Error(
-        `Cannot set hparam, ${hparamName}, when it is not known for ` +
-          `experimentIds: ${experimentIds.join(', ')}`
-      );
-    }
-
-    if (defaultFilter.type !== DomainType.DISCRETE) {
-      throw new Error(
-        `Cannot set ${hparamName} when default filter is not of discrete type.`
-      );
-    }
-
-    const possibleValues = new Set<DiscreteHparamValue>(
-      defaultFilter.possibleValues
-    );
-    const illegalValues = [...filterValues].filter(
-      (value) => !possibleValues.has(value)
-    );
-    if (illegalValues.length) {
-      throw new Error(
-        `New filter for ${hparamName} has more than one value that is not ` +
-          `present in the spec. Bad values: ${illegalValues.join(', ')}`
-      );
-    }
-
-    const newHparamFilters = new Map(filter.hparams);
-    newHparamFilters.set(hparamName, {
-      ...(existingFilter as DiscreteFilter | undefined),
-      type: DomainType.DISCRETE,
-      includeUndefined,
-      possibleValues: [...possibleValues] as DiscreteHparamValues,
-      filterValues,
-    });
-
-    return {
-      ...state,
-      filters: {
-        ...state.filters,
-        [id]: {
-          ...filter,
-          hparams: newHparamFilters,
-        },
-      },
-    };
-  }),
-  on(actions.hparamsIntervalHparamFilterChanged, (state, action) => {
-    const {
-      experimentIds,
-      hparamName,
-      filterLowerValue,
-      filterUpperValue,
-      includeUndefined,
-    } = action;
-    const id = getIdFromExperimentIds(experimentIds);
-    const filter = state.filters[id] ?? {
-      metrics: new Map(),
-      hparams: new Map(),
-    };
-
-    const existingFilter = filter.hparams.get(hparamName);
-    if (existingFilter && existingFilter.type !== DomainType.INTERVAL) {
-      throw new RangeError(
-        `New interval filter of ${hparamName} conflicts existing filter of ` +
-          DomainType[existingFilter.type]
-      );
-    }
-
-    const defaultFilter = combineDefaultHparamFilters(
-      experimentIds
-        .filter((eid) => {
-          return Boolean(state.specs[eid]);
-        })
-        .map((eid) => {
-          return state.specs[eid].hparam.defaultFilters;
-        })
-    ).get(hparamName);
-
-    if (!defaultFilter) {
-      throw new Error(
-        `Cannot set hpara, ${hparamName}, when it is not known for ` +
-          `experimentIds: ${experimentIds.join(', ')}`
-      );
-    }
-
-    if (defaultFilter.type !== DomainType.INTERVAL) {
-      throw new Error(
-        `Cannot set ${hparamName} when default filter is not of interval type.`
-      );
-    }
-
-    const newHparamFilters = new Map(filter.hparams);
-    newHparamFilters.set(hparamName, {
-      ...(existingFilter as IntervalFilter | undefined),
-      type: DomainType.INTERVAL,
-      includeUndefined,
-      minValue: defaultFilter.minValue,
-      maxValue: defaultFilter.maxValue,
-      filterLowerValue,
-      filterUpperValue,
-    });
-
-    return {
-      ...state,
-      filters: {
-        ...state.filters,
-        [id]: {
-          ...filter,
-          hparams: newHparamFilters,
-        },
-      },
-    };
-  }),
-  on(actions.hparamsMetricFilterChanged, (state, action) => {
-    const {
-      experimentIds,
-      metricTag,
-      filterLowerValue,
-      filterUpperValue,
-      includeUndefined,
-    } = action;
-    const id = getIdFromExperimentIds(experimentIds);
-    const filter = state.filters[id] ?? {
-      metrics: new Map(),
-      hparams: new Map(),
-    };
-
-    const defaultFilter = combineDefaultMetricFilters(
-      experimentIds
-        .filter((eid) => {
-          return Boolean(state.specs[eid]);
-        })
-        .map((eid) => {
-          return state.specs[eid].metric.defaultFilters;
-        })
-    ).get(metricTag);
-
-    if (!defaultFilter) {
-      throw new Error(
-        `Cannot set metric, ${metricTag}, when it is not known for ` +
-          `experimentIds: ${experimentIds.join(', ')}`
-      );
-    }
-
-    const existingFilter = filter.metrics.get(metricTag);
-    const newMetricFilters = new Map(filter.metrics);
-    newMetricFilters.set(metricTag, {
-      ...(existingFilter as IntervalFilter | undefined),
-      type: DomainType.INTERVAL,
-      includeUndefined,
-      minValue: defaultFilter.minValue,
-      maxValue: defaultFilter.maxValue,
-      filterLowerValue,
-      filterUpperValue,
-    } as IntervalFilter);
-
-    return {
-      ...state,
-      filters: {
-        ...state.filters,
-        [id]: {
-          ...filter,
-          metrics: newMetricFilters,
-        },
-      },
-    };
-  }),
-  /**
-   * Sets default filter values.
-   *
-   * Implementation note: hparam values are defined as part of the spec but
-   * metrics are defined with the `runToHparamsAndMetrics`. We need to collect
-   * all the values for metrics, then compute the bound to create the default
-   * filter value. When the metric values are missing, we set the bound to (0,
-   * 1).
-   */
-  on(fetchRunsSucceeded, (state, action) => {
-    if (Object.keys(action.newRunsAndMetadata).length === 0) {
-      return state;
-    }
-
-    const eidToHparams: ExperimentToHparams = {...state.specs};
-
-    // Arbitrary ordered collection of metric values collected across
-    // experiments and runs to compute extents of metrics.
-    const metricValueMinAndMax = new Map<string, {min: number; max: number}>();
-    const metricTags = new Set<string>();
-    for (const eid of Object.keys(action.newRunsAndMetadata)) {
-      const newHparamFilters = new Map<
-        string,
-        DiscreteFilter | IntervalFilter
-      >();
-      const newMetricFilters = new Map<string, IntervalFilter>();
-      const discreteHparams = new Map<string, Set<DiscreteHparamValue>>();
-      const intervalHparams = new Map<
-        string,
-        {minValue: number; maxValue: number}
-      >();
-
-      const {runs, metadata} = action.newRunsAndMetadata[eid];
-      // Tabulate all the metric values from runs.
-      for (const run of runs) {
-        const hparamAndMetrics = metadata.runToHparamsAndMetrics[run.id];
-        if (!hparamAndMetrics) {
-          continue;
-        }
-        for (const metric of hparamAndMetrics.metrics) {
-          const minAndMax = metricValueMinAndMax.get(metric.tag);
-          metricValueMinAndMax.set(metric.tag, {
-            min: minAndMax
-              ? Math.min(minAndMax.min, metric.value)
-              : metric.value,
-            max: minAndMax
-              ? Math.max(minAndMax.max, metric.value)
-              : metric.value,
-          });
-        }
-      }
-      // Record and combine all hparam specs (multiple experiments can
-      // have hparams of same name but disjoint set of domain).
-      for (const {name, domain} of metadata.hparamSpecs) {
-        if (domain.type === DomainType.DISCRETE) {
-          const values = discreteHparams.get(name) || new Set();
-          for (const value of domain.values) {
-            values.add(value);
-          }
-          discreteHparams.set(name, values);
-        } else {
-          const existing = intervalHparams.get(name);
-          intervalHparams.set(name, {
-            minValue: existing
-              ? Math.min(domain.minValue, existing.minValue)
-              : domain.minValue,
-            maxValue: existing
-              ? Math.max(domain.maxValue, existing.maxValue)
-              : domain.maxValue,
-          });
-        }
-      }
-      for (const metricSpec of metadata.metricSpecs) {
-        metricTags.add(metricSpec.tag);
-      }
-
-      for (const [name, values] of discreteHparams) {
-        newHparamFilters.set(name, {
-          type: DomainType.DISCRETE,
-          includeUndefined: true,
-          possibleValues: [...values],
-          filterValues: [...values],
-        } as DiscreteFilter);
-      }
-      for (const [name, {minValue, maxValue}] of intervalHparams) {
-        newHparamFilters.set(name, {
-          type: DomainType.INTERVAL,
-          includeUndefined: true,
-          minValue,
-          maxValue,
-          filterLowerValue: minValue,
-          filterUpperValue: maxValue,
-        });
-      }
-      for (const metricTag of metricTags) {
-        const minAndMax = metricValueMinAndMax.get(metricTag);
-        const min = minAndMax?.min ?? 0;
-        const max = minAndMax?.max ?? 0;
-        newMetricFilters.set(metricTag, {
-          type: DomainType.INTERVAL,
-          includeUndefined: true,
-          minValue: min,
-          maxValue: max,
-          filterLowerValue: min,
-          filterUpperValue: max,
-        });
-      }
-
-      eidToHparams[eid] = {
-        hparam: {
-          ...eidToHparams[eid]?.hparam,
-          specs: metadata.hparamSpecs,
-          defaultFilters: newHparamFilters,
-        },
-        metric: {
-          ...eidToHparams[eid]?.metric,
-          specs: metadata.metricSpecs,
-          defaultFilters: newMetricFilters,
-        },
+  on(persistentSettingsLoaded, (state, {partialSettings}) => {
+    const {dashboardDisplayedHparamColumns: storedColumns} = partialSettings;
+    if (storedColumns) {
+      return {
+        ...state,
+        dashboardDisplayedHparamColumns: storedColumns,
       };
     }
+    return state;
+  }),
+  on(actions.hparamsFetchSessionGroupsSucceeded, (state, action) => {
+    const nextDashboardHparamSpecs = action.hparamSpecs;
+    const nextDashboardSessionGroups = action.sessionGroups;
 
     return {
       ...state,
-      specs: eidToHparams,
+      dashboardHparamSpecs: nextDashboardHparamSpecs,
+      dashboardSessionGroups: nextDashboardSessionGroups,
+      numDashboardHparamsLoaded: nextDashboardHparamSpecs.length,
+    };
+  }),
+  on(actions.dashboardHparamFilterAdded, (state, action) => {
+    const nextHparamFilters = new Map(state.dashboardFilters.hparams);
+    nextHparamFilters.set(action.name, action.filter);
+
+    return {
+      ...state,
+      dashboardFilters: {
+        ...state.dashboardFilters,
+        hparams: nextHparamFilters,
+      },
+    };
+  }),
+  on(actions.dashboardMetricFilterAdded, (state, action) => {
+    const nextMetricFilters = new Map(state.dashboardFilters.metrics);
+    nextMetricFilters.set(action.name, action.filter);
+
+    return {
+      ...state,
+      dashboardFilters: {
+        ...state.dashboardFilters,
+        metrics: nextMetricFilters,
+      },
+    };
+  }),
+  on(actions.dashboardHparamFilterRemoved, (state, action) => {
+    const nextHparamFilters = new Map(state.dashboardFilters.hparams);
+    nextHparamFilters.delete(action.name);
+
+    return {
+      ...state,
+      dashboardFilters: {
+        ...state.dashboardFilters,
+        hparams: nextHparamFilters,
+      },
+    };
+  }),
+  on(actions.dashboardMetricFilterRemoved, (state, action) => {
+    const nextMetricFilters = new Map(state.dashboardFilters.metrics);
+    nextMetricFilters.delete(action.name);
+
+    return {
+      ...state,
+      dashboardFilters: {
+        ...state.dashboardFilters,
+        metrics: nextMetricFilters,
+      },
+    };
+  }),
+  on(actions.dashboardHparamColumnAdded, (state, {column, nextTo, side}) => {
+    const {dashboardDisplayedHparamColumns: oldColumns} = state;
+
+    let destinationIndex = oldColumns.length; // Default to append at end.
+    if (nextTo !== undefined && side !== undefined) {
+      const nextToIndex = oldColumns.findIndex(
+        (col) => col.name === nextTo.name
+      );
+      if (nextToIndex !== -1) {
+        destinationIndex = side === Side.RIGHT ? nextToIndex + 1 : nextToIndex;
+      }
+    }
+    const newColumn = {...column, enabled: true};
+    const newColumns = [...oldColumns];
+    newColumns.splice(destinationIndex, 0, newColumn);
+
+    return {
+      ...state,
+      dashboardDisplayedHparamColumns: newColumns,
+    };
+  }),
+  on(actions.dashboardHparamColumnRemoved, (state, {column}) => {
+    const newColumns = state.dashboardDisplayedHparamColumns.filter(
+      ({name}) => name !== column.name
+    );
+
+    return {
+      ...state,
+      dashboardDisplayedHparamColumns: newColumns,
+    };
+  }),
+  on(actions.dashboardHparamColumnToggled, (state, {column: toggledColumn}) => {
+    const newColumns = state.dashboardDisplayedHparamColumns.map((column) => {
+      if (column.name === toggledColumn.name) {
+        return {
+          ...column,
+          enabled: !toggledColumn.enabled,
+        };
+      }
+      return column;
+    });
+
+    return {
+      ...state,
+      dashboardDisplayedHparamColumns: newColumns,
+    };
+  }),
+  on(
+    actions.dashboardHparamColumnOrderChanged,
+    (state, {source, destination, side}) => {
+      const {dashboardDisplayedHparamColumns: columns} = state;
+      const newColumns = dataTableUtils.moveColumn(
+        columns,
+        source,
+        destination,
+        side
+      );
+      return {
+        ...state,
+        dashboardDisplayedHparamColumns: newColumns,
+      };
+    }
+  ),
+  on(actions.loadAllDashboardHparams, (state) => {
+    return {
+      ...state,
+      numDashboardHparamsToLoad: 0, // All.
     };
   })
 );

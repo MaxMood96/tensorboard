@@ -26,18 +26,16 @@ import {
 import {CardState} from '../store/metrics_types';
 import {
   CardId,
+  CardUniqueInfo,
   HeaderEditInfo,
   HeaderToggleInfo,
   HistogramMode,
-  MinMaxStep,
   PluginType,
   TooltipSort,
   XAxisType,
 } from '../types';
-import {
-  ColumnHeader,
-  SortingInfo,
-} from '../views/card_renderer/scalar_card_types';
+import {SortingInfo, DataTableMode} from '../../widgets/data_table/types';
+import {Extent} from '../../widgets/line_chart_v2/lib/public_types';
 
 export const metricsSettingsPaneClosed = createAction(
   '[Metrics] Metrics Settings Pane Closed'
@@ -49,6 +47,20 @@ export const metricsSettingsPaneToggled = createAction(
 
 export const metricsSlideoutMenuToggled = createAction(
   '[Metrics] Slide out settings menu toggled'
+);
+
+export const metricsSlideoutMenuOpened = createAction(
+  '[Metrics] User requested to open the slide out menu',
+  props<{mode: DataTableMode}>()
+);
+
+export const tableEditorTabChanged = createAction(
+  '[Metrics] User changed the tab in the table editor',
+  props<{tab: DataTableMode}>()
+);
+
+export const metricsSlideoutMenuClosed = createAction(
+  '[Metrics] Slide out settings menu closed'
 );
 
 export const metricsTagMetadataRequested = createAction(
@@ -70,6 +82,11 @@ export const metricsCardStateUpdated = createAction(
     cardId: CardId;
     settings: Partial<CardState>;
   }>()
+);
+
+export const metricsCardFullSizeToggled = createAction(
+  '[Metrics] Metrics Card Full Size Toggled',
+  props<{cardId: CardId}>()
 );
 
 export const metricsChangeTooltipSort = createAction(
@@ -198,13 +215,9 @@ export const timeSelectionChanged = createAction(
   props<{cardId?: CardId} & TimeSelectionWithAffordance>()
 );
 
-export const cardMinMaxChanged = createAction(
-  '[Metrics] Card Min Max Changed',
-  props<{cardId: CardId; minMax: MinMaxStep}>()
-);
-
-export const timeSelectionCleared = createAction(
-  '[Metrics] Linked Time Selection Cleared'
+export const cardViewBoxChanged = createAction(
+  '[Metrics] Card User View Box Changed',
+  props<{cardId: CardId; userViewBox: Extent | null}>()
 );
 
 export const linkedTimeToggled = createAction(
@@ -221,20 +234,13 @@ export const sortingDataTable = createAction(
   props<SortingInfo>()
 );
 
-export const dataTableColumnDrag = createAction(
-  '[Metrics] Data table column dragged',
-  props<{
-    newOrder: ColumnHeader[];
-  }>()
-);
-
-export const dataTableColumnEdited = createAction(
-  '[Metrics] Data table columns edited in edit menu',
+export const dataTableColumnOrderChanged = createAction(
+  '[Metrics] Data table columns order changed',
   props<HeaderEditInfo>()
 );
 
 export const dataTableColumnToggled = createAction(
-  '[Metrics] Data table column toggled in edit menu',
+  '[Metrics] Data table column toggled in edit menu or delete button clicked',
   props<HeaderToggleInfo>()
 );
 
@@ -244,6 +250,13 @@ export const stepSelectorToggled = createAction(
     // Affordance for internal analytics purpose. When no affordance is specified or is
     // undefined we do not want to log an analytics event.
     affordance?: TimeSelectionToggleAffordance;
+    // This action can be triggered by two different events:
+    //   1) Clicking the checkbox in the settings panel
+    //   2) Removing the last fob from a scalar card
+    //
+    // Setting the cardId results in stepSelection being toggled for a specific card.
+    // Without the cardId being set this action only effects the global stepSeletion.
+    cardId?: CardId;
   }>()
 );
 export const rangeSelectionToggled = createAction(
@@ -254,5 +267,23 @@ export const rangeSelectionToggled = createAction(
     affordance?: TimeSelectionToggleAffordance;
   }>()
 );
+
+export const metricsHideEmptyCardsToggled = createAction(
+  '[Metrics] Hide Empty Cards Changed'
+);
+
+export const metricsUnresolvedPinnedCardsFromLocalStorageAdded = createAction(
+  '[Metrics] Unresolved Pinned Cards From Local Storage Added',
+  props<{cards: CardUniqueInfo[]}>()
+);
+
+export const metricsClearAllPinnedCards = createAction(
+  '[Metrics] Clear all pinned cards'
+);
+
+export const metricsEnableSavingPinsToggled = createAction(
+  '[Metrics] Enable Saving Pins Toggled'
+);
+
 // TODO(jieweiwu): Delete after internal code is updated.
 export const stepSelectorTimeSelectionChanged = timeSelectionChanged;

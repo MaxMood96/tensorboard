@@ -13,14 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 import {Injectable} from '@angular/core';
-import {Observable, of} from 'rxjs';
+import {Observable} from 'rxjs';
 import {map} from 'rxjs/operators';
 import {TBHttpClient} from '../../webapp_data_source/tb_http_client';
-import {
-  HparamsAndMetadata,
-  Run,
-  RunsDataSource,
-} from './runs_data_source_types';
+import {Run, RunsDataSource} from './runs_data_source_types';
 
 type BackendGetRunsResponse = string[];
 
@@ -33,26 +29,19 @@ export class TBRunsDataSource implements RunsDataSource {
   constructor(private readonly http: TBHttpClient) {}
 
   fetchRuns(experimentId: string): Observable<Run[]> {
-    return this.http.get<BackendGetRunsResponse>('data/runs').pipe(
-      map((runs) => {
-        return runs.map((run) => {
-          return {
-            id: runToRunId(run, experimentId),
-            name: run,
-            // Use a dummy startTime for now, until there is backend support.
-            startTime: 0,
-          };
-        });
-      })
-    );
-  }
-
-  fetchHparamsMetadata(experimentId: string): Observable<HparamsAndMetadata> {
-    // Return a stub implementation.
-    return of({
-      hparamSpecs: [],
-      metricSpecs: [],
-      runToHparamsAndMetrics: {},
-    });
+    return this.http
+      .get<BackendGetRunsResponse>(`/experiment/${experimentId}/data/runs`)
+      .pipe(
+        map((runs) => {
+          return runs.map((run) => {
+            return {
+              id: runToRunId(run, experimentId),
+              name: run,
+              // Use a dummy startTime for now, until there is backend support.
+              startTime: 0,
+            };
+          });
+        })
+      );
   }
 }

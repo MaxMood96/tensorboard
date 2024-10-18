@@ -1,6 +1,7 @@
 # Description:
 # TensorBoard, a dashboard for investigating TensorFlow
 
+load("@rules_python//python:py_test.bzl", "py_test")
 load("//tensorboard/defs:protos.bzl", "tb_proto_library")
 
 package(default_visibility = ["//tensorboard:internal"])
@@ -127,10 +128,16 @@ tb_proto_library(
 )
 
 tb_proto_library(
+    name = "graph_debug_info",
+    srcs = ["graph_debug_info.proto"],
+)
+
+tb_proto_library(
     name = "graph",
     srcs = ["graph.proto"],
     deps = [
         ":function",
+        ":graph_debug_info",
         ":node_def",
         ":versions",
     ],
@@ -150,6 +157,7 @@ tb_proto_library(
         ":saved_object_graph",
         ":saver",
         ":struct",
+        ":tensor",
         ":tensor_shape",
         ":types",
     ],
@@ -326,6 +334,7 @@ tb_proto_library(
         ":full_type",
         ":function",
         ":graph",
+        ":graph_debug_info",
         ":histogram",
         ":meta_graph",
         ":node_def",

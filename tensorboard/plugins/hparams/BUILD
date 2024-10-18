@@ -4,6 +4,9 @@
 load("//tensorboard/defs:defs.bzl", "tf_ts_library")
 load("//tensorboard/defs:web.bzl", "tf_web_library")
 load("//tensorboard/defs:protos.bzl", "tb_proto_library")
+load("@rules_python//python:py_binary.bzl", "py_binary")
+load("@rules_python//python:py_library.bzl", "py_library")
+load("@rules_python//python:py_test.bzl", "py_test")
 
 package(default_visibility = ["//tensorboard:internal"])
 
@@ -29,6 +32,7 @@ py_library(
         "download_data.py",
         "get_experiment.py",
         "hparams_plugin.py",
+        "json_format_compat.py",
         "list_metric_evals.py",
         "list_session_groups.py",
         "metrics.py",
@@ -111,10 +115,19 @@ py_test(
         "//tensorboard:context",
         "//tensorboard:expect_protobuf_installed",
         "//tensorboard:expect_tensorflow_installed",
-        "//tensorboard/backend/event_processing:data_provider",
-        "//tensorboard/backend/event_processing:event_multiplexer",
-        "//tensorboard/compat/proto:protos_all_py_pb2",
-        "//tensorboard/plugins/scalar:metadata",
+        "//tensorboard/data:provider",
+    ],
+)
+
+py_test(
+    name = "json_format_compat_test",
+    size = "small",
+    srcs = [
+        "json_format_compat_test.py",
+    ],
+    deps = [
+        ":hparams_plugin",
+        "//tensorboard:expect_absl_testing_absltest_installed",
     ],
 )
 

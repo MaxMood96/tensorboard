@@ -1,3 +1,176 @@
+# Release 2.18.0
+
+The 2.18 minor series tracks TensorFlow 2.18.
+
+## Features
+- Compatibility updates for changes in Numpy 2.0 (#6871)
+- Relax `protobuf` restriction to work with versions < 5.0.0 (in addition to >= 5.0.0) (#6888)
+
+## Bug Fixes
+- Fixes a floating menu disappearing immediately after right-clicking on the trigger point. (#6891)
+
+
+# Release 2.17.1
+
+## Bug Fixes
+- Relax restriction on protobuf dependency (#6887)
+- Update usage of numpy to reflect numpy 2.0 changes (#6871)
+- Fix stacking of notification dot (#6875, thanks @crisbeto)
+- Fix setting dialog styling regression (#6885)
+
+# Release 2.17.0
+
+The 2.17 minor series tracks TensorFlow 2.17.
+
+## Features
+- Enable adding hparams columns in scalar data tables in Time Series dashboard (#6737 accidentally omitted from notes in release 2.16.0)
+- Usability improvements for runs table and hparams in Time Series dashboard (#6837, #6839)
+- Global pins: Store pinned cards in local storage, so they’d be pinned when similar experiments are loaded. (#6850, #6819, #6821, etc)
+- Handle large number of Hparams (#6777, #6780, #6807)
+- Infra: Reduce binary size of [`tensorboard-data-server`](http://pypi.org/project/tensorboard-data-server/) (aka “Rustboard”). (#6765, thanks @Corwinpro)
+
+## Bug Fixes
+- Text plugin: Preserve whitespace. (#6833)
+- Hparams plugin: load metrics when run name is “.” (#6822)
+- Resolved Graph plugin compatibility issues with Keras 3. (#6759, #6823, #6761, #6857, etc. thanks @mloc)
+- Restricts the protobuf dependency to be < 5.0.0, due to a recent breaking change (see #6808 for details).
+- Fixes internal flag wrapper class to not crash when its `__class__` attribute is accessed, which was blocking debugging with pyCharm (#6751, thanks @lostinplace)
+
+
+# Release 2.16.2
+
+## Bug Fixes
+- Remove dependency on tf-keras pip package. (#6759)
+
+# Release 2.16.1
+
+## Bug Fixes
+- Depend on tf-keras instead of tf-keras-nightly.
+
+# Release 2.16.0
+
+The 2.16 minor series tracks TensorFlow 2.16.
+
+## Features
+- Time Series dashboard:
+  - Improved sorting of runs whose names begin with integers. (#6664)
+  - Improved hparams filtering. (#6680, #6692)
+  - Usability improvements and fixes in runs table. (#6656, #6658, #6678, #6736)
+- Graph plugin:
+  - Improved support for dark theme. (#6691, thanks @tummala-manasa)
+- Removed dependencies on `google-auth`, `google-auth-oauthlib`, and `requests` libraries. (#6705)
+- Relaxed restriction on protobuf dependency, given that issue @protocolbuffers/protobuf#13485 was fixed. (#6660, #6746)
+
+## Bug Fixes
+- Hparams plugin:
+  - Fixed Download data links. (#6719 fixes #6088, thanks @louis49)
+- Time Series dashboard:
+  - Fixed color picker usability regression. (#6682)
+- Brings the `tensorboard-data-server` wheel into conformance with [PEP 600](https://peps.python.org/pep-0600/), enabling support for the `--load-fast` flag in systems with GLIBC >= 2.29. (Requires installing/updating package `tensorboard-data-server==0.7.2`) (#6636 fixes #6578)
+
+## Breaking Changes
+- `tensorboard dev` subcommand will now show an error message without sending any requests, as our hosted service at http://tensorboard.dev has been shut down.
+- Not quite a breaking change, but to something to be aware of: TensorBoard releases generally follow TensorFlow’s releases. However, while TF 2.16 will start using Keras 3 by default, TensorBoard plugins’ implementation remains with keras 2 support only. See @keras-team/keras#18467 for details.
+
+# Release 2.15.2
+
+## Breaking Changes
+
+- Updates restriction on protobuf dependency to avoid bad version while still
+  allowing newer versions.(#6660 & #6746)
+
+# Release 2.15.1
+
+## Breaking Changes
+
+  - TensorBoard.dev is shutting down. See the FAQ at https://tensorboard.dev.
+  - No longer able to upload new data to TensorBoard.dev. The `tensorboard dev upload` command will fail. (#6638)
+  - The experimental dataframe api has been deleted. (#6644)
+
+## Bug Fixes
+
+- Time Series dashboard:
+  - Sort run names with leading numbers differently. (#6664)
+  - Show scrollbar in runs table only when needed. (#6656)
+  - Fix 'Prev' and 'Next' buttons in dark mode. (#6663)
+  - Better loading/reloading behavior for runs table. (#6658)
+
+# Release 2.15.0
+
+The 2.15 minor series tracks TensorFlow 2.15.
+
+## Features
+
+- Scalar chart data tables are shown by default. This can be disabled from the general settings panel. (#6563)
+- Hparams support in timeseries. Allows sorting and filtering the Runs Table in the Time Series dashboard using values logged with the Hparams plugin. (#6565)
+- Better default sorting of Hparams in the Hparams plugin. Sort the ones that have multiple values to the top of the list. (#6601)
+- New material components across the UI. (#6631)
+
+## Bug Fixes
+
+- Restricts protobuf dependency to < 4.24 due to protocolbuffers/protobuf#13485 (#6538)
+- Relaxes dependency on google-auth-oauthlib to allow versions 1.x < 2.0 (#6609, thanks @elgalu)
+
+# Release 2.14.1
+
+## Bug Fixes
+
+- Fix indirect dependency on the package six. (#6580)
+- Remove wheel from the requirements in setup.py (#6567)
+
+# Release 2.14.0
+
+The 2.14 minor series tracks TensorFlow 2.14.
+
+## Features
+
+- Small data table and step selector usability and accessibility improvements (#6372, #6409, #6410, #6431)
+
+## Bug Fixes
+
+- Embedding Projector plugin improvements
+  - Fix tSNE tweaking hyperparams (#6320, thanks @alicialics)
+  - Some visualization and usability improvements (#6373, #6326, #6325, #6429, thanks @alicialics)
+- Graph plugin: Fix rendering issue for tensors with zero dimension size (#6420)
+- HParams plugin: A couple fixes related to boolean and NaN values (#6393, #6496)
+
+## Breaking Changes
+
+- Drops support for Python 3.8.
+
+# Release 2.13.0
+
+The 2.13 minor series tracks TensorFlow 2.13
+
+## Bug Fixes
+
+- Several improvements to the projector plugin (thank you @alicialics)
+  - Embedding Projector: fix regex suffix css (#6329)
+  - Embedding Projector: fix bookmark projection state (#6328)
+  - Embedding Projector: fix dark mode button contrast (#6327)
+  - Embedding Projector: update tsne learning rate during iteration (#6319)
+
+# Release 2.12.3
+
+## Bug Fixes
+
+- Redirects the unsupported What-If Tool plugin to the supported [Learning
+  Interpretability Tool](https://pair-code.github.io/lit/) to avoid protobuf
+  compatibility errors (#6343)
+
+# Release 2.12.2
+
+## Bug Fixes
+
+- Fixes scalar chart rendering in Safari (#6303)
+
+# Release 2.12.1
+
+## Bug Fixes
+
+- Bumps `google-auth-oauthlib` dependency restriction to be compatible with
+  versions up to 1.0 (#6246)
+
 # Release 2.12.0
 
 The 2.12 minor series tracks TensorFlow 2.12.
@@ -23,6 +196,22 @@ The 2.12 minor series tracks TensorFlow 2.12.
 
 - Drops support for Python 3.7 and marks 3.11 as supported (#6144).
 - Drops support for protobuf < 3.19.6 and adds support for 4.x (#6147).
+
+# Release 2.11.2
+
+## Bug Fixes
+
+- Fixes bug introduced in #6107, which was included in release 2.11.1. (#6142)
+
+# Release 2.11.1
+
+NOTE: This release has a bug related to the limited-input device auth flow, and was "yanked" in PyPi (https://pypi.org/help/#yanked). A newer patch release (2.11.2) contains these changes along with the fix for the bug.
+
+## Bug Fixes
+
+- Prevent regression in TensorBoard.dev uploader authentication by replacing deprecated OOB auth flow with limited-input device flow. (#6107)
+See [deprecation announcement](https://developers.googleblog.com/2022/02/making-oauth-flows-safer.html).
+- Fix compatibility with numpy 1.24.0 by removing deprecated type aliases (#6117, #6140)
 
 # Release 2.11.0
 

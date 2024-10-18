@@ -33,12 +33,14 @@ import {RouterOutletComponent} from './router_outlet_component';
 import {RouterOutletContainer} from './router_outlet_container';
 
 @Component({
+  standalone: false,
   selector: 'first',
   template: 'I am a test',
 })
 class FirstTestableComponent {}
 
 @Component({
+  standalone: false,
   selector: 'second',
   template: 'I am inevitable',
 })
@@ -59,13 +61,7 @@ describe('router_outlet', () => {
         SecondTestableComponent,
       ],
       schemas: [NO_ERRORS_SCHEMA],
-    })
-      .overrideModule(BrowserDynamicTestingModule, {
-        set: {
-          entryComponents: [FirstTestableComponent, SecondTestableComponent],
-        },
-      })
-      .compileComponents();
+    }).compileComponents();
 
     store = TestBed.inject<Store<State>>(Store) as MockStore<State>;
     store.overrideSelector(getActiveRoute, null);

@@ -483,12 +483,12 @@ def raze_fetch_remote_crates():
 
     maybe(
         http_archive,
-        name = "raze__h2__0_3_13",
-        url = "https://crates.io/api/v1/crates/h2/0.3.13/download",
+        name = "raze__h2__0_3_19",
+        url = "https://crates.io/api/v1/crates/h2/0.3.19/download",
         type = "tar.gz",
-        sha256 = "37a82c6d637fc9515a4694bbf1cb2457b79d81ce52b3108bdeea58b07dd34a57",
-        strip_prefix = "h2-0.3.13",
-        build_file = Label("//third_party/rust/remote:BUILD.h2-0.3.13.bazel"),
+        sha256 = "d357c7ae988e7d2182f7d7871d0b963962420b0678b0997ce7de72001aeab782",
+        strip_prefix = "h2-0.3.19",
+        build_file = Label("//third_party/rust/remote:BUILD.h2-0.3.19.bazel"),
     )
 
     maybe(
@@ -743,12 +743,12 @@ def raze_fetch_remote_crates():
 
     maybe(
         http_archive,
-        name = "raze__memoffset__0_6_1",
-        url = "https://crates.io/api/v1/crates/memoffset/0.6.1/download",
+        name = "raze__memoffset__0_6_5",
+        url = "https://crates.io/api/v1/crates/memoffset/0.6.5/download",
         type = "tar.gz",
-        sha256 = "157b4208e3059a8f9e78d559edc658e13df41410cb3ae03979c83130067fdd87",
-        strip_prefix = "memoffset-0.6.1",
-        build_file = Label("//third_party/rust/remote:BUILD.memoffset-0.6.1.bazel"),
+        sha256 = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce",
+        strip_prefix = "memoffset-0.6.5",
+        build_file = Label("//third_party/rust/remote:BUILD.memoffset-0.6.5.bazel"),
     )
 
     maybe(

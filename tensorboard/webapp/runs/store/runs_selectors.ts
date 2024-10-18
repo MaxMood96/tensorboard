@@ -14,8 +14,7 @@ limitations under the License.
 ==============================================================================*/
 import {createFeatureSelector, createSelector} from '@ngrx/store';
 import {DataLoadState, LoadState} from '../../types/data';
-import {SortDirection} from '../../types/ui';
-import {GroupBy, SortKey} from '../types';
+import {GroupBy, RunToHparamMap} from '../types';
 import {
   ExperimentId,
   Run,
@@ -26,6 +25,14 @@ import {
   RUNS_FEATURE_KEY,
 } from './runs_types';
 import {createGroupBy} from './utils';
+import {getExperimentIdsFromRoute} from '../../app_routing/store/app_routing_selectors';
+import {
+  getDashboardDisplayedHparamColumns,
+  getDashboardSessionGroups,
+} from '../../hparams/_redux/hparams_selectors';
+import {HparamValue, RunToHparamsAndMetrics} from '../../hparams/types';
+import {ColumnHeader, SortingInfo} from '../../widgets/data_table/types';
+import {dataTableUtils} from '../../widgets/data_table/utils';
 
 const getRunsState = createFeatureSelector<RunsState>(RUNS_FEATURE_KEY);
 
@@ -68,6 +75,8 @@ export const getRun = createSelector(
 
 /**
  * Returns Observable that emits runs list for an experiment.
+ * This is intended to be used in the experiment_list page.
+ * TODO(rileyajones) remove usage of this selector from the timeseries dashboard.
  */
 export const getRuns = createSelector(
   getDataState,
@@ -76,6 +85,113 @@ export const getRuns = createSelector(
     return runIds
       .filter((id) => Boolean(state.runMetadata[id]))
       .map((id) => state.runMetadata[id]);
+  }
+);
+
+/**
+ * Determines hparam data for each run in the active route.
+ *
+ * Attempts to match each run with a session and, if found, copies the hparam
+ * values from the corresponding session group to the run.
+ *
+ * Note, it returns an RunToHparamsAndMetrics but leaves the `metrics` field
+ * blank since the Hparams data sources does not actually retrieve metrics
+ * data.
+ *
+ * Meant for usage in the Dashboard views.
+ */
+export const getDashboardRunsToHparams = createSelector(
+  getDashboardSessionGroups,
+  getExperimentIdsFromRoute,
+  getDataState,
+  (dashboardSessionGroups, experimentIds, state): RunToHparamsAndMetrics => {
+    if (!experimentIds) {
+      return {};
+    }
+
+    const runIds: string[] = [];
+    for (const experimentId of experimentIds) {
+      runIds.push(...(state.runIds[experimentId] || []));
+    }
+
+    const sessionToHparams: Record<string, HparamValue[]> = {};
+    for (const sessionGroup of dashboardSessionGroups) {
+      const hparams: HparamValue[] = Object.entries(sessionGroup.hparams).map(
+        (keyValue) => {
+          const [hparam, value] = keyValue;
+          return {name: hparam, value};
+        }
+      );
+      for (const session of sessionGroup.sessions) {
+        sessionToHparams[session.name] = hparams;
+      }
+    }
+
+    // Sort sessions based on length of name. We want to match runs with the
+    // longest matching session name. So, for example, given sessions "1" and
+    // "11", a run with name "11/train" should match with session "11".
+    const sortedSessionKeys = Object.keys(sessionToHparams).sort(
+      (a, b) => b.length - a.length
+    );
+
+    const runToHparamsAndMetrics: RunToHparamsAndMetrics = {};
+    for (const runId of runIds) {
+      for (const sessionName of sortedSessionKeys) {
+        if (runId.startsWith(sessionName)) {
+          runToHparamsAndMetrics[runId] = {
+            hparams: sessionToHparams[sessionName],
+            // The underlying data source that fetches the session groups data
+            // does not retrieve metrics.
+            metrics: [],
+          };
+          break;
+        }
+      }
+    }
+    return runToHparamsAndMetrics;
+  }
+);
+
+export const getRunToHparamMap = createSelector(
+  getDashboardRunsToHparams,
+  (runToHparamsAndMetrics: RunToHparamsAndMetrics): RunToHparamMap => {
+    const runToHparamMap: RunToHparamMap = {};
+    for (const [runName, {hparams}] of Object.entries(runToHparamsAndMetrics)) {
+      runToHparamMap[runName] = new Map(
+        hparams.map(({name, value}) => [name, value])
+      );
+    }
+    return runToHparamMap;
+  }
+);
+
+/**
+ * Get the runs used on the dashboard.
+ */
+export const getDashboardRuns = createSelector(
+  getDataState,
+  getExperimentIdsFromRoute,
+  getDashboardRunsToHparams,
+  (
+    state: RunsDataState,
+    experimentIds: string[] | null,
+    runsToHparamsAndMetrics: RunToHparamsAndMetrics
+  ): Array<Run & {experimentId: string}> => {
+    if (!experimentIds) {
+      return [];
+    }
+    return experimentIds
+      .map((experimentId) => {
+        return (state.runIds[experimentId] || [])
+          .filter((id) => Boolean(state.runMetadata[id]))
+          .map((runId) => {
+            const run = {...state.runMetadata[runId], experimentId};
+            run.hparams = runsToHparamsAndMetrics[runId]?.hparams ?? null;
+            run.metrics = runsToHparamsAndMetrics[runId]?.metrics ?? null;
+            return run;
+          });
+      })
+      .flat();
   }
 );
 
@@ -166,26 +282,6 @@ const getUiState = createSelector(
 );
 
 /**
- * Returns Observable that emits pagination option on the run selector.
- */
-export const getRunSelectorPaginationOption = createSelector(
-  getUiState,
-  (state: RunsUiState): {pageIndex: number; pageSize: number} => {
-    return state.paginationOption;
-  }
-);
-
-/**
- * Returns Observable that emits sort options on the run selector.
- */
-export const getRunSelectorSort = createSelector(
-  getUiState,
-  (state: RunsUiState): {key: SortKey | null; direction: SortDirection} => {
-    return state.sort;
-  }
-);
-
-/**
  * Returns Observable that emits selection state of runs. If the runs for the
  * current route are desired, please see ui_selectors.ts's
  * getCurrentRouteRunSelection instead.
@@ -219,4 +315,34 @@ export const getColorGroupRegexString = createSelector(
   (state: RunsDataState): string => {
     return state.colorGroupRegexString;
   }
+);
+
+/**
+ * Gets the standard columns to be displayed by the runs table.
+ */
+export const getRunsTableHeaders = createSelector(
+  getUiState,
+  (state: RunsUiState): ColumnHeader[] => {
+    return state.runsTableHeaders;
+  }
+);
+
+/**
+ * Gets the information needed to sort the runs data table.
+ */
+export const getRunsTableSortingInfo = createSelector(
+  getUiState,
+  (state: RunsUiState): SortingInfo => {
+    return state.sortingInfo;
+  }
+);
+
+/**
+ * Gets the grouped columns to be displayed by the runs table.
+ */
+export const getGroupedRunsTableHeaders = createSelector(
+  getRunsTableHeaders,
+  getDashboardDisplayedHparamColumns,
+  (runsTableHeaders, hparamColumns) =>
+    dataTableUtils.groupColumns([...runsTableHeaders, ...hparamColumns])
 );

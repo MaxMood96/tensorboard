@@ -38,7 +38,11 @@ import {
 } from '../../../widgets/histogram/histogram_types';
 import {buildNormalizedHistograms} from '../../../widgets/histogram/histogram_util';
 import {TruncatedPathModule} from '../../../widgets/text/truncated_path_module';
-import {stepSelectorToggled, timeSelectionChanged} from '../../actions';
+import {
+  metricsCardFullSizeToggled,
+  stepSelectorToggled,
+  timeSelectionChanged,
+} from '../../actions';
 import {PluginType} from '../../data_source';
 import * as selectors from '../../store/metrics_selectors';
 import {
@@ -54,6 +58,7 @@ import {RunNameModule} from './run_name_module';
 import {VisLinkedTimeSelectionWarningModule} from './vis_linked_time_selection_warning_module';
 
 @Component({
+  standalone: false,
   selector: 'tb-histogram',
   template: ``,
 })
@@ -256,35 +261,37 @@ describe('histogram card', () => {
   });
 
   describe('full size', () => {
+    let dispatchedActions: Action[];
+
     beforeEach(() => {
       provideMockCardSeriesData(selectSpy, PluginType.HISTOGRAMS, 'card1');
+
+      dispatchedActions = [];
+      spyOn(store, 'dispatch').and.callFake((action: Action) => {
+        dispatchedActions.push(action);
+      });
     });
 
-    it('requests full size on toggle', () => {
-      const onFullWidthChanged = jasmine.createSpy();
-      const onFullHeightChanged = jasmine.createSpy();
+    it('dispatches metricsCardFullSizeToggled on full size toggle', () => {
       const fixture = createHistogramCardContainer();
       fixture.detectChanges();
 
-      fixture.componentInstance.fullWidthChanged.subscribe(onFullWidthChanged);
-      fixture.componentInstance.fullHeightChanged.subscribe(
-        onFullHeightChanged
-      );
       const button = fixture.debugElement.query(
         By.css('[aria-label="Toggle full size mode"]')
       );
 
       button.nativeElement.click();
-      expect(onFullWidthChanged.calls.allArgs()).toEqual([[true]]);
-      expect(onFullHeightChanged.calls.allArgs()).toEqual([[true]]);
-
-      button.nativeElement.click();
-      expect(onFullWidthChanged.calls.allArgs()).toEqual([[true], [false]]);
-      expect(onFullHeightChanged.calls.allArgs()).toEqual([[true], [false]]);
+      expect(dispatchedActions).toEqual([
+        metricsCardFullSizeToggled({cardId: 'card1'}),
+      ]);
     });
   });
 
   describe('linked time', () => {
+    beforeEach(() => {
+      store.overrideSelector(selectors.getMetricsRangeSelectionEnabled, true);
+    });
+
     it('dispatches timeSelectionChanged when HistogramComponent emits onLinkedTimeSelectionChanged event', () => {
       provideMockCardSeriesData(selectSpy, PluginType.HISTOGRAMS, 'card1');
       store.overrideSelector(selectors.getMetricsLinkedTimeSelection, {
@@ -363,6 +370,31 @@ describe('histogram card', () => {
       expect(viz.componentInstance.timeSelection).toEqual({
         start: {step: 5},
         end: {step: 10},
+      });
+    });
+
+    it('removes end step when range selection is disabled', () => {
+      provideMockCardSeriesData(
+        selectSpy,
+        PluginType.HISTOGRAMS,
+        'card1',
+        undefined,
+        [buildHistogramStepData({step: 5}), buildHistogramStepData({step: 15})]
+      );
+      store.overrideSelector(selectors.getMetricsLinkedTimeSelection, {
+        start: {step: 5},
+        end: {step: 10},
+      });
+      store.overrideSelector(selectors.getMetricsRangeSelectionEnabled, false);
+      const fixture = createHistogramCardContainer();
+      fixture.detectChanges();
+
+      const viz = fixture.debugElement.query(
+        By.directive(TestableHistogramWidget)
+      );
+      expect(viz.componentInstance.timeSelection).toEqual({
+        start: {step: 5},
+        end: null,
       });
     });
 

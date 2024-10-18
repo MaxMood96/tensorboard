@@ -13,5 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 export * from './metrics_data_source';
+export * from './saved_pins_data_source';
 export * from './metrics_data_source_module';
+export * from './saved_pins_data_source_module';
 export * from './types';

@@ -29,6 +29,11 @@ import '../tf_hparams_table_view/tf-hparams-table-view';
  */
 @customElement('tf-hparams-sessions-pane')
 class TfHparamsSessionsPane extends PolymerElement {
+  constructor() {
+    super();
+    this.logAction('Plugin Load');
+  }
+
   static readonly template = html`
     <paper-header-panel>
       <paper-toolbar slot="header" class="tab-bar">
@@ -36,11 +41,19 @@ class TfHparamsSessionsPane extends PolymerElement {
           <!-- view-id can be used by integration tests to locate a tab.
                It should be the name of the root element implementing the view
                without the 'tf-hparams-' prefix. -->
-          <paper-tab view-id="table-view"> TABLE VIEW </paper-tab>
-          <paper-tab view-id="parallel-coords-view">
+          <paper-tab on-click="_tableTabClicked" view-id="table-view">
+            TABLE VIEW
+          </paper-tab>
+          <paper-tab
+            on-click="_parallelCoordsTabClicked"
+            view-id="parallel-coords-view"
+          >
             PARALLEL COORDINATES VIEW
           </paper-tab>
-          <paper-tab view-id="scatter-plot-matrix-view">
+          <paper-tab
+            on-click="_scatterPlotMatrixTabClicked"
+            view-id="scatter-plot-matrix-view"
+          >
             SCATTER PLOT MATRIX VIEW
           </paper-tab>
           <div class="help-and-feedback">
@@ -169,4 +182,36 @@ class TfHparamsSessionsPane extends PolymerElement {
     type: Number,
   })
   _selectedTab: number = 0;
+  _tableTabClicked: () => void = () => {
+    this.logAction('Tab Clicked', 'Table');
+  };
+  _parallelCoordsTabClicked: () => void = () => {
+    this.logAction('Tab Clicked', 'Parallel Coords');
+  };
+  _scatterPlotMatrixTabClicked: () => void = () => {
+    this.logAction('Tab Clicked', 'Scatter Plot Matrix');
+  };
+
+  logAction: (action: string, tabName?: string) => void = (
+    action: string,
+    tabName?: string
+  ) => {
+    // If window['dataLayer'] is defined, use it, otherwise any logging calls
+    // will be no-ops. window['dataLayer'] is only defined in the hosted
+    // TensorBoard.
+    // @ts-ignore
+    const dataLayer = window['dataLayer'] || [];
+
+    // Define gtag() function similar to how it is documented in
+    // https://developers.google.com/tag-platform/gtagjs/install.
+    function gtag() {
+      dataLayer.push(arguments);
+    }
+    // @ts-ignore
+
+    gtag('event', action, {
+      event_category: 'HParams',
+      event_label: tabName,
+    });
+  };
 }

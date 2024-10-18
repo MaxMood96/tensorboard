@@ -18,7 +18,10 @@ import {FakeMatIconRegistry} from '@angular/material/icon/testing';
 
 // Keep in sync with the 'svg_bundle' target in tensorboard/webapp/BUILD.
 const KNOWN_SVG_ICON = new Set([
+  'add_24px',
+  'arrow_back_24px',
   'arrow_downward_24px',
+  'arrow_forward_24px',
   'arrow_upward_24px',
   'brightness_6_24px',
   'bug_report_24px',
@@ -36,6 +39,7 @@ const KNOWN_SVG_ICON = new Set([
   'expand_less_24px',
   'expand_more_24px',
   'filter_alt_24px',
+  'filter_list_24px',
   'flag_24px',
   'fullscreen_24px',
   'fullscreen_exit_24px',
@@ -50,6 +54,7 @@ const KNOWN_SVG_ICON = new Set([
   'line_weight_24px',
   'more_vert_24px',
   'notifications_none_24px',
+  'open_in_new_24px',
   'palette_24px',
   'refresh_24px',
   'search_24px',
@@ -69,6 +74,7 @@ const KNOWN_SVG_ICON = new Set([
  * compilation time due to unknown input onto the template.
  */
 @Component({
+  standalone: false,
   template: '<ng-container>{{svgIcon}}</ng-container>',
   selector: 'mat-icon',
 })

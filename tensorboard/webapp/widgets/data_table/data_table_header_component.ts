@@ -13,18 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  Input,
-  OnDestroy,
-} from '@angular/core';
-import {
-  ColumnHeaderType,
-  ColumnHeader,
-} from '../../metrics/views/card_renderer/scalar_card_types';
+import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
+import {ColumnHeader, ColumnHeaderType} from './types';
 
 @Component({
+  standalone: false,
   selector: 'tb-data-table-header',
   templateUrl: 'data_table_header_component.ng.html',
   styleUrls: ['data_table_header_component.css'],
@@ -34,36 +27,12 @@ export class DataTableHeaderComponent {
   @Input() header!: ColumnHeader;
   ColumnHeaderType = ColumnHeaderType;
 
-  getHeaderTextColumn(columnHeader: ColumnHeaderType): string {
+  getSpecialTypeClasses(columnHeader: ColumnHeaderType) {
     switch (columnHeader) {
-      case ColumnHeaderType.RUN:
-        return 'Run';
-      case ColumnHeaderType.VALUE:
-        return 'Value';
-      case ColumnHeaderType.STEP:
-        return 'Step';
-      case ColumnHeaderType.TIME:
-        return 'Time';
-      case ColumnHeaderType.RELATIVE_TIME:
-        return 'Relative';
-      case ColumnHeaderType.SMOOTHED:
-        return 'Smoothed';
-      case ColumnHeaderType.VALUE_CHANGE:
-        return 'Value';
-      case ColumnHeaderType.START_STEP:
-        return 'Start Step';
-      case ColumnHeaderType.END_STEP:
-        return 'End Step';
-      case ColumnHeaderType.START_VALUE:
-        return 'Start Value';
-      case ColumnHeaderType.END_VALUE:
-        return 'End Value';
-      case ColumnHeaderType.MIN_VALUE:
-        return 'Min';
-      case ColumnHeaderType.MAX_VALUE:
-        return 'Max';
-      case ColumnHeaderType.PERCENTAGE_CHANGE:
-        return '%';
+      case ColumnHeaderType.STEP_AT_MIN:
+        return 'step-at-min';
+      case ColumnHeaderType.STEP_AT_MAX:
+        return 'step-at-max';
       default:
         return '';
     }

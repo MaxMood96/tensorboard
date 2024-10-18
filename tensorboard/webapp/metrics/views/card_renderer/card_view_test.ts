@@ -35,6 +35,7 @@ import {CardViewComponent} from './card_view_component';
 import {CardViewContainer} from './card_view_container';
 
 @Component({
+  standalone: false,
   selector: 'scalar-card',
   template: ``,
 })
@@ -108,7 +109,7 @@ describe('card view test', () => {
   it('emits fullWidthChanged after lower level fullWidthChanged', () => {
     const fixture = TestBed.createComponent(CardViewContainer);
     fixture.componentInstance.cardId = 'cardId';
-    fixture.componentInstance.pluginType = PluginType.SCALARS;
+    fixture.componentInstance.pluginType = PluginType.IMAGES;
     intersectionObserver.simulateVisibilityChange(fixture, true);
     fixture.detectChanges();
 
@@ -117,40 +118,16 @@ describe('card view test', () => {
 
     expect(onFullWidthChanged.calls.allArgs()).toEqual([]);
 
-    const scalarCard = fixture.debugElement.query(By.css('scalar-card'));
-    scalarCard.componentInstance.fullWidthChanged.emit(true);
+    const imageCard = fixture.debugElement.query(By.css('image-card'));
+    imageCard.componentInstance.fullWidthChanged.emit(true);
     fixture.detectChanges();
 
     expect(onFullWidthChanged.calls.allArgs()).toEqual([[true]]);
 
-    scalarCard.componentInstance.fullWidthChanged.emit(false);
+    imageCard.componentInstance.fullWidthChanged.emit(false);
     fixture.detectChanges();
 
     expect(onFullWidthChanged.calls.allArgs()).toEqual([[true], [false]]);
-  });
-
-  it('emits fullHeightChanged after lower level fullHeightChanged', () => {
-    const fixture = TestBed.createComponent(CardViewContainer);
-    fixture.componentInstance.cardId = 'cardId';
-    fixture.componentInstance.pluginType = PluginType.SCALARS;
-    intersectionObserver.simulateVisibilityChange(fixture, true);
-    fixture.detectChanges();
-
-    const onFullHeightChanged = jasmine.createSpy();
-    fixture.componentInstance.fullHeightChanged.subscribe(onFullHeightChanged);
-
-    expect(onFullHeightChanged.calls.allArgs()).toEqual([]);
-
-    const scalarCard = fixture.debugElement.query(By.css('scalar-card'));
-    scalarCard.componentInstance.fullHeightChanged.emit(true);
-    fixture.detectChanges();
-
-    expect(onFullHeightChanged.calls.allArgs()).toEqual([[true]]);
-
-    scalarCard.componentInstance.fullHeightChanged.emit(false);
-    fixture.detectChanges();
-
-    expect(onFullHeightChanged.calls.allArgs()).toEqual([[true], [false]]);
   });
 
   it('dispatches action when pin state changes', () => {

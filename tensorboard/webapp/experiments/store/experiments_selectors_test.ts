@@ -13,7 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 import * as selectors from './experiments_selectors';
+import {State} from '../../app_state';
 import {buildExperiment, buildStateFromExperimentsState} from './testing';
+import {buildMockState} from '../../testing/utils';
+import {
+  buildAppRoutingState,
+  buildStateFromAppRoutingState,
+} from '../../app_routing/store/testing';
+import {RouteKind} from '../../app_routing/types';
 
 describe('experiments selectors', () => {
   describe('#getExperiment', () => {
@@ -45,6 +52,55 @@ describe('experiments selectors', () => {
       expect(selectors.getExperiment(state, {experimentId: 'tigger'})).toEqual(
         null
       );
+    });
+  });
+
+  describe('#getDashboardExperimentNames', () => {
+    let state: State;
+
+    beforeEach(() => {
+      const foo = buildExperiment({id: 'foo', name: 'foo name'});
+      const bar = buildExperiment({id: 'bar', name: 'bar name'});
+
+      state = buildMockState({
+        ...buildStateFromAppRoutingState(
+          buildAppRoutingState({
+            activeRoute: {
+              routeKind: RouteKind.COMPARE_EXPERIMENT,
+              params: {
+                experimentIds: 'exp1:foo,exp2:bar,exp3:baz',
+              },
+            },
+          })
+        ),
+        ...buildStateFromExperimentsState({
+          data: {
+            experimentMap: {foo, bar},
+          },
+        }),
+      });
+    });
+
+    it('translates experiment ids to experiment names', () => {
+      expect(selectors.getDashboardExperimentNames(state)).toEqual({
+        foo: 'foo name',
+        bar: 'bar name',
+      });
+    });
+
+    it('returns an empty object when no experiments are provided', () => {
+      state = {
+        ...state,
+        ...buildStateFromAppRoutingState(
+          buildAppRoutingState({
+            activeRoute: {
+              routeKind: RouteKind.EXPERIMENTS,
+              params: {},
+            },
+          })
+        ),
+      };
+      expect(selectors.getDashboardExperimentNames(state)).toEqual({});
     });
   });
 });

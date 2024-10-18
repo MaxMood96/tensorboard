@@ -66,6 +66,8 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
   umapIs3d: boolean = true;
   @property({type: Number})
   umapNeighbors: number = 15;
+  @property({type: Number})
+  umapMinDist: number = 0.1;
   // PCA projection.
   @property({type: Array})
   pcaComponents: Array<{
@@ -154,6 +156,10 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
   private updateTSNEPerplexityFromSliderChange() {
     if (this.perplexitySlider) {
       this.perplexity = +this.perplexitySlider.value;
+      if (this.dataSet?.hasTSNERun) {
+        this.dataSet.hasTSNERun = false;
+        this.beginProjection(this.currentProjection);
+      }
     }
     (this.$$('.tsne-perplexity span') as HTMLSpanElement).innerText =
       '' + this.perplexity;
@@ -161,6 +167,9 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
   private updateTSNELearningRateFromUIChange() {
     if (this.learningRateInput) {
       this.learningRate = Math.pow(10, +this.learningRateInput.value);
+      if (this.dataSet) {
+        this.dataSet.setTsneLearningRate(this.learningRate);
+      }
     }
     (this.$$('.tsne-learning-rate span') as HTMLSpanElement).innerText =
       '' + this.learningRate;
@@ -259,6 +268,7 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
     // UMAP
     this.umapIs3d = bookmark.umapIs3d;
     this.umapNeighbors = bookmark.umapNeighbors;
+    this.umapMinDist = bookmark.umapMinDist;
     // custom
     this.customSelectedSearchByMetadataOption =
       bookmark.customSelectedSearchByMetadataOption;
@@ -295,6 +305,10 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
     }
     if (bookmark.selectedProjection != null) {
       this.showTab(bookmark.selectedProjection);
+      if (this.currentProjection === 'tsne') {
+        this.runTSNE();
+        this.dataSet.initTsneSolutionFromCurrentProjection();
+      }
     }
     this.enablePolymerChangesTriggerReprojection();
   }
@@ -315,6 +329,8 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
     bookmark.tSNEis3d = this.tSNEis3d;
     // UMAP
     bookmark.umapIs3d = this.umapIs3d;
+    bookmark.umapNeighbors = this.umapNeighbors;
+    bookmark.umapMinDist = this.umapMinDist;
     // custom
     bookmark.customSelectedSearchByMetadataOption =
       this.customSelectedSearchByMetadataOption;
@@ -363,10 +379,12 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
     this.clearCentroids();
     (this.$$('#tsne-sampling') as HTMLElement).style.display =
       pointCount > TSNE_SAMPLE_SIZE ? null! : 'none';
+    (this.$$('#umap-sampling') as HTMLElement).style.display =
+      pointCount > UMAP_SAMPLE_SIZE ? null! : 'none';
     const wasSampled =
       dataSet == null
         ? false
-        : dataSet.dim[0] > PCA_SAMPLE_DIM || dataSet.dim[1] > PCA_SAMPLE_DIM;
+        : dataSet.dim[0] > PCA_SAMPLE_SIZE || dataSet.dim[1] > PCA_SAMPLE_DIM;
     (this.$$('#pca-sampling') as HTMLElement).style.display = wasSampled
       ? null!
       : 'none';
@@ -379,6 +397,9 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
   }
   @observe('tSNEis3d')
   _tsneDimensionToggleObserver() {
+    if (this.dataSet?.hasTSNERun) {
+      this.dataSet.hasTSNERun = false;
+    }
     this.beginProjection(this.currentProjection);
   }
   @observe('umapIs3d')
@@ -536,20 +557,26 @@ class ProjectionsPanel extends LegacyElementMixin(PolymerElement) {
     this.runUmapButton.disabled = true;
     const nComponents = this.umapIs3d ? 3 : 2;
     const nNeighbors = this.umapNeighbors;
-    this.dataSet.projectUmap(nComponents, nNeighbors, (iteration: number) => {
-      if (iteration != null) {
-        this.runUmapButton.disabled = false;
-        this.projector.notifyProjectionPositionsUpdated();
-        if (!projectionChangeNotified && this.dataSet.projections['umap']) {
+    const minDist = this.umapMinDist;
+    this.dataSet.projectUmap(
+      nComponents,
+      nNeighbors,
+      minDist,
+      (iteration: number) => {
+        if (iteration != null) {
+          this.runUmapButton.disabled = false;
+          this.projector.notifyProjectionPositionsUpdated();
+          if (!projectionChangeNotified && this.dataSet.projections['umap']) {
+            this.projector.onProjectionChanged();
+            projectionChangeNotified = true;
+          }
+        } else {
+          this.runUmapButton.innerText = 'Re-run';
+          this.runUmapButton.disabled = false;
           this.projector.onProjectionChanged();
-          projectionChangeNotified = true;
         }
-      } else {
-        this.runUmapButton.innerText = 'Re-run';
-        this.runUmapButton.disabled = false;
-        this.projector.onProjectionChanged();
       }
-    });
+    );
   }
   @observe('pcaX', 'pcaY', 'pcaZ')
   private showPCAIfEnabled() {

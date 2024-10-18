@@ -5,7 +5,6 @@ package(default_visibility = ["//tensorboard:internal"])
 tf_sass_binary(
     name = "main_view_styles",
     src = "main_view_component.scss",
-    strict_deps = False,
     deps = [
         "//tensorboard/webapp:angular_material_sass_deps",
         "//tensorboard/webapp/metrics/views:metrics_common_styles",
@@ -16,7 +15,6 @@ tf_sass_binary(
 tf_sass_binary(
     name = "filter_input_component_styles",
     src = "filter_input_component.scss",
-    strict_deps = False,
     deps = [
         "//tensorboard/webapp:angular_material_sass_deps",
         "//tensorboard/webapp/theme",
@@ -26,9 +24,7 @@ tf_sass_binary(
 tf_sass_binary(
     name = "filtered_view_component_styles",
     src = "filtered_view_component.scss",
-    strict_deps = False,
     deps = [
-        "//tensorboard/webapp:angular_material_sass_deps",
         "//tensorboard/webapp/metrics/views:metrics_common_styles",
         "//tensorboard/webapp/theme",
     ],
@@ -37,7 +33,6 @@ tf_sass_binary(
 tf_sass_binary(
     name = "pinned_view_component_styles",
     src = "pinned_view_component.scss",
-    strict_deps = False,
     deps = [
         "//tensorboard/webapp:angular_material_sass_deps",
         "//tensorboard/webapp/metrics/views:metrics_common_styles",
@@ -48,7 +43,6 @@ tf_sass_binary(
 tf_sass_binary(
     name = "card_grid_component_styles",
     src = "card_grid_component.scss",
-    strict_deps = False,
     deps = [
         "//tensorboard/webapp/metrics/views:metrics_common_styles",
         "//tensorboard/webapp/theme",
@@ -58,7 +52,6 @@ tf_sass_binary(
 tf_sass_binary(
     name = "card_groups_component_styles",
     src = "card_groups_component.scss",
-    strict_deps = False,
     deps = [
         "//tensorboard/webapp/metrics/views:metrics_common_styles",
         "//tensorboard/webapp/theme",
@@ -68,7 +61,6 @@ tf_sass_binary(
 tf_sass_binary(
     name = "card_group_toolbar_component_styles",
     src = "card_group_toolbar_component.scss",
-    strict_deps = False,
     deps = [
         "//tensorboard/webapp/metrics/views:metrics_common_styles",
         "//tensorboard/webapp/theme",
@@ -81,11 +73,20 @@ tf_ts_library(
     deps = [
         "//tensorboard/webapp:app_state",
         "//tensorboard/webapp:selectors",
+        "//tensorboard/webapp/app_routing:types",
+        "//tensorboard/webapp/hparams:types",
+        "//tensorboard/webapp/hparams/_redux:hparams_selectors",
         "//tensorboard/webapp/metrics:utils",
         "//tensorboard/webapp/metrics/data_source",
         "//tensorboard/webapp/metrics/store",
         "//tensorboard/webapp/metrics/views:types",
         "//tensorboard/webapp/metrics/views:utils",
+        "//tensorboard/webapp/metrics/views/card_renderer:scalar_card_types",
+        "//tensorboard/webapp/runs:types",
+        "//tensorboard/webapp/runs/store:selectors",
+        "//tensorboard/webapp/runs/views/runs_table:types",
+        "//tensorboard/webapp/util:matcher",
+        "//tensorboard/webapp/util:memoize",
         "//tensorboard/webapp/util:types",
         "@npm//@ngrx/store",
     ],
@@ -135,6 +136,7 @@ tf_ng_module(
         "//tensorboard/webapp/angular:expect_angular_material_icon",
         "//tensorboard/webapp/angular:expect_angular_material_input",
         "//tensorboard/webapp/angular:expect_angular_material_progress_spinner",
+        "//tensorboard/webapp/customization",
         "//tensorboard/webapp/metrics:types",
         "//tensorboard/webapp/metrics:utils",
         "//tensorboard/webapp/metrics/actions",
@@ -164,10 +166,12 @@ tf_ts_library(
     testonly = True,
     srcs = [
         "card_grid_test.ts",
+        "common_selectors_test.ts",
         "filter_input_test.ts",
         "main_view_test.ts",
     ],
     deps = [
+        ":common_selectors",
         ":main_view",
         "//tensorboard/webapp:app_state",
         "//tensorboard/webapp:selectors",
@@ -178,6 +182,13 @@ tf_ts_library(
         "//tensorboard/webapp/angular:expect_angular_material_button",
         "//tensorboard/webapp/angular:expect_angular_platform_browser_animations",
         "//tensorboard/webapp/angular:expect_ngrx_store_testing",
+        "//tensorboard/webapp/app_routing",
+        "//tensorboard/webapp/app_routing:testing",
+        "//tensorboard/webapp/app_routing/store:testing",
+        "//tensorboard/webapp/customization",
+        "//tensorboard/webapp/experiments/store:testing",
+        "//tensorboard/webapp/hparams:types",
+        "//tensorboard/webapp/hparams/_redux:testing",
         "//tensorboard/webapp/metrics:test_lib",
         "//tensorboard/webapp/metrics:types",
         "//tensorboard/webapp/metrics/actions",
@@ -185,6 +196,11 @@ tf_ts_library(
         "//tensorboard/webapp/metrics/store",
         "//tensorboard/webapp/metrics/views:types",
         "//tensorboard/webapp/metrics/views/card_renderer",
+        "//tensorboard/webapp/metrics/views/card_renderer:scalar_card_types",
+        "//tensorboard/webapp/runs/store:selectors",
+        "//tensorboard/webapp/runs/store:testing",
+        "//tensorboard/webapp/runs/store:types",
+        "//tensorboard/webapp/runs/views/runs_table:types",
         "//tensorboard/webapp/settings",
         "//tensorboard/webapp/testing:dom",
         "//tensorboard/webapp/testing:mat_icon",

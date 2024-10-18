@@ -28,66 +28,114 @@ import {
 } from 'rxjs/operators';
 import {areSameRouteKindAndExperiments} from '../../app_routing';
 import {navigated} from '../../app_routing/actions';
+import {RouteKind} from '../../app_routing/types';
 import {State} from '../../app_state';
 import * as coreActions from '../../core/actions';
+import * as hparamsActions from '../../hparams/_redux/hparams_actions';
 import {
   getActiveRoute,
+  getDashboardExperimentNames,
   getExperimentIdsFromRoute,
   getRuns,
   getRunsLoadState,
 } from '../../selectors';
 import {DataLoadState, LoadState} from '../../types/data';
+import {ColumnHeaderType} from '../../widgets/data_table/types';
 import * as actions from '../actions';
-import {
-  HparamsAndMetadata,
-  Run,
-  RunsDataSource,
-} from '../data_source/runs_data_source_types';
-import {ExperimentIdToRunsAndMetadata} from '../types';
+import {Run, RunsDataSource} from '../data_source/runs_data_source_types';
+import {ExperimentIdToRuns} from '../types';
 
 /**
  * Runs effect for fetching data from the backend.
  */
 @Injectable()
 export class RunsEffects {
-  /**
-   * Ensures runs are loaded when a run table is shown.
-   *
-   * @export
-   */
-  loadRunsOnRunTableShown$ = createEffect(
-    () =>
-      this.actions$.pipe(
-        ofType(actions.runTableShown),
-        mergeMap(({experimentIds}) => {
-          const experimentsToFetch$ = this.getExperimentsWithLoadState(
-            experimentIds,
-            (state) => {
-              return (
-                state === DataLoadState.FAILED ||
-                state === DataLoadState.NOT_LOADED
-              );
-            }
-          );
-          return experimentsToFetch$.pipe(
-            filter((experimentIds) => !!experimentIds.length),
-            mergeMap((experimentIdsToBeFetched) => {
-              return this.fetchAllRunsList(
-                experimentIds,
-                experimentIdsToBeFetched
-              );
-            })
-          );
-        })
-      ),
-    {dispatch: false}
-  );
-
   constructor(
     private readonly actions$: Actions,
     private readonly store: Store<State>,
     private readonly runsDataSource: RunsDataSource
-  ) {}
+  ) {
+    this.experimentsWithStaleRunsOnRouteChange$ = this.actions$.pipe(
+      ofType(navigated),
+      withLatestFrom(this.store.select(getActiveRoute)),
+      distinctUntilChanged(([, prevRoute], [, currRoute]) => {
+        return areSameRouteKindAndExperiments(prevRoute, currRoute);
+      }),
+      withLatestFrom(this.store.select(getExperimentIdsFromRoute)),
+      filter(([, experimentIds]) => !!experimentIds),
+      map(([, experimentIds]) => experimentIds!),
+      mergeMap((experimentIds) => {
+        return this.getExperimentsWithLoadState(experimentIds, (state) => {
+          return (
+            state === DataLoadState.FAILED || state === DataLoadState.NOT_LOADED
+          );
+        }).pipe(
+          map((experimentIdsToBeFetched) => {
+            return {experimentIds, experimentIdsToBeFetched};
+          })
+        );
+      })
+    );
+    this.experimentsWithStaleRunsOnReload$ = this.actions$.pipe(
+      ofType(coreActions.reload, coreActions.manualReload),
+      withLatestFrom(this.store.select(getExperimentIdsFromRoute)),
+      filter(([, experimentIds]) => !!experimentIds),
+      map(([, experimentIds]) => experimentIds!),
+      mergeMap((experimentIds) => {
+        return this.getExperimentsWithLoadState(experimentIds, (state) => {
+          return state !== DataLoadState.LOADING;
+        }).pipe(
+          map((experimentIdsToBeFetched) => {
+            return {experimentIds, experimentIdsToBeFetched};
+          })
+        );
+      })
+    );
+    this.loadRunsOnNavigationOrReload$ = createEffect(
+      () => {
+        return merge(
+          this.experimentsWithStaleRunsOnRouteChange$,
+          this.experimentsWithStaleRunsOnReload$
+        ).pipe(
+          withLatestFrom(this.store.select(getActiveRoute)),
+          filter(
+            ([, route]) => route !== null && route.routeKind !== RouteKind.CARD
+          ),
+          mergeMap(([{experimentIds, experimentIdsToBeFetched}]) => {
+            return this.fetchAllRunsList(
+              experimentIds,
+              experimentIdsToBeFetched
+            );
+          })
+        );
+      },
+      {dispatch: false}
+    );
+    this.removeHparamFilterWhenColumnIsRemoved$ = createEffect(
+      () =>
+        this.actions$.pipe(
+          ofType(actions.runsTableHeaderRemoved),
+          tap(({header}) => {
+            if (header.type === ColumnHeaderType.HPARAM) {
+              this.store.dispatch(
+                hparamsActions.dashboardHparamFilterRemoved({
+                  name: header.name,
+                })
+              );
+              return;
+            }
+            if (header.type === ColumnHeaderType.METRIC) {
+              this.store.dispatch(
+                hparamsActions.dashboardMetricFilterRemoved({
+                  name: header.name,
+                })
+              );
+            }
+          })
+        ),
+      {dispatch: false}
+    );
+  }
 
   private getRunsListLoadState(experimentId: string): Observable<LoadState> {
     return this.store.select(getRunsLoadState, {experimentId}).pipe(take(1));
@@ -110,62 +158,23 @@ export class RunsEffects {
     );
   }
 
-  private readonly experimentsWithStaleRunsOnRouteChange$ = this.actions$.pipe(
-    ofType(navigated),
-    withLatestFrom(this.store.select(getActiveRoute)),
-    distinctUntilChanged(([, prevRoute], [, currRoute]) => {
-      return areSameRouteKindAndExperiments(prevRoute, currRoute);
-    }),
-    withLatestFrom(this.store.select(getExperimentIdsFromRoute)),
-    filter(([, experimentIds]) => !!experimentIds),
-    map(([, experimentIds]) => experimentIds!),
-    mergeMap((experimentIds) => {
-      return this.getExperimentsWithLoadState(experimentIds, (state) => {
-        return (
-          state === DataLoadState.FAILED || state === DataLoadState.NOT_LOADED
-        );
-      }).pipe(
-        map((experimentIdsToBeFetched) => {
-          return {experimentIds, experimentIdsToBeFetched};
-        })
-      );
-    })
-  );
+  private readonly experimentsWithStaleRunsOnRouteChange$;
 
-  private readonly experimentsWithStaleRunsOnReload$ = this.actions$.pipe(
-    ofType(coreActions.reload, coreActions.manualReload),
-    withLatestFrom(this.store.select(getExperimentIdsFromRoute)),
-    filter(([, experimentIds]) => !!experimentIds),
-    map(([, experimentIds]) => experimentIds!),
-    mergeMap((experimentIds) => {
-      return this.getExperimentsWithLoadState(experimentIds, (state) => {
-        return state !== DataLoadState.LOADING;
-      }).pipe(
-        map((experimentIdsToBeFetched) => {
-          return {experimentIds, experimentIdsToBeFetched};
-        })
-      );
-    })
-  );
+  private readonly experimentsWithStaleRunsOnReload$;
 
   /**
    * Fetches runs on navigation or in-app reload.
    *
    * @export
    */
-  loadRunsOnNavigationOrReload$ = createEffect(
-    () => {
-      return merge(
-        this.experimentsWithStaleRunsOnRouteChange$,
-        this.experimentsWithStaleRunsOnReload$
-      ).pipe(
-        mergeMap(({experimentIds, experimentIdsToBeFetched}) => {
-          return this.fetchAllRunsList(experimentIds, experimentIdsToBeFetched);
-        })
-      );
-    },
-    {dispatch: false}
-  );
+  loadRunsOnNavigationOrReload$;
+
+  /**
+   * Removes hparam filter when column is removed.
+   *
+   * @export
+   */
+  removeHparamFilterWhenColumnIsRemoved$;
 
   /**
    * IMPORTANT: actions are dispatched even when there are no experiments to
@@ -204,26 +213,28 @@ export class RunsEffects {
         return forkJoin(fetchOrGetRuns);
       }),
       map((runsAndMedataList) => {
-        const newRunsAndMetadata = {} as ExperimentIdToRunsAndMetadata;
+        const newRuns: ExperimentIdToRuns = {};
         const runsForAllExperiments = [];
 
         for (const runsAndMedata of runsAndMedataList) {
           runsForAllExperiments.push(...runsAndMedata.runs);
           if (runsAndMedata.fromRemote) {
-            newRunsAndMetadata[runsAndMedata.experimentId] = {
+            newRuns[runsAndMedata.experimentId] = {
               runs: runsAndMedata.runs,
-              metadata: runsAndMedata.metadata,
             };
           }
         }
-        return {newRunsAndMetadata, runsForAllExperiments};
+        return {newRuns, runsForAllExperiments};
       }),
-      tap(({newRunsAndMetadata, runsForAllExperiments}) => {
+      withLatestFrom(this.store.select(getDashboardExperimentNames)),
+      tap(([runsData, expNameByExpId]) => {
+        const {newRuns, runsForAllExperiments} = runsData;
         this.store.dispatch(
           actions.fetchRunsSucceeded({
             experimentIds,
-            newRunsAndMetadata,
+            newRuns,
             runsForAllExperiments,
+            expNameByExpId,
           })
         );
       }),
@@ -263,14 +274,14 @@ export class RunsEffects {
     fromRemote: true;
     experimentId: string;
     runs: Run[];
-    metadata: HparamsAndMetadata;
   }> {
-    return forkJoin([
-      this.runsDataSource.fetchRuns(experimentId),
-      this.runsDataSource.fetchHparamsMetadata(experimentId),
-    ]).pipe(
-      map(([runs, metadata]) => {
-        return {fromRemote: true, experimentId, runs, metadata};
+    return this.runsDataSource.fetchRuns(experimentId).pipe(
+      map((runs) => {
+        return {
+          fromRemote: true,
+          experimentId,
+          runs: runs as Run[],
+        };
       })
     );
   }

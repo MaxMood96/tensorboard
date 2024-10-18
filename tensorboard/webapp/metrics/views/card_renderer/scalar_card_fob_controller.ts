@@ -27,6 +27,7 @@ import {Scale} from '../../../widgets/line_chart_v2/lib/public_types';
 import {MinMaxStep} from './scalar_card_types';
 
 @Component({
+  standalone: false,
   selector: 'scalar-card-fob-controller',
   template: `
     <card-fob-controller
@@ -39,9 +40,9 @@ import {MinMaxStep} from './scalar_card_types';
       [highestStep]="getHighestStep()"
       [lowestStep]="getLowestStep()"
       [prospectiveStep]="prospectiveStep"
-      [isProspectiveFobFeatureEnabled]="isProspectiveFobFeatureEnabled"
       [cardFobHelper]="cardFobHelper"
       [showExtendedLine]="true"
+      [allowFobRemoval]="allowFobRemoval"
       (onProspectiveStepChanged)="onProspectiveStepChanged($event)"
       (onTimeSelectionChanged)="onTimeSelectionChanged.emit($event)"
       (onTimeSelectionToggled)="onTimeSelectionToggled.emit($event)"
@@ -56,8 +57,8 @@ export class ScalarCardFobController {
   @Input() minMaxHorizontalViewExtend!: [number, number];
   @Input() minMaxStep!: MinMaxStep;
   @Input() axisSize!: number;
-  @Input() isProspectiveFobFeatureEnabled: Boolean = false;
   @Input() disableInteraction: boolean = false;
+  @Input() allowFobRemoval?: boolean = true;
 
   @Output() onTimeSelectionChanged = new EventEmitter<{
     timeSelection: TimeSelection;

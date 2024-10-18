@@ -20,6 +20,7 @@ $ virtualenv -p python3 tf
 $ source tf/bin/activate
 (tf)$ pip install --upgrade pip
 (tf)$ pip install tf-nightly -r tensorboard/pip_package/requirements.txt -r tensorboard/pip_package/requirements_dev.txt
+(tf)$ pip uninstall -y tb-nightly
 ```
 
 TensorBoard builds are done with [Bazel](https://bazel.build), so you may need to [install Bazel](https://docs.bazel.build/versions/master/install.html). The Bazel build will automatically "vulcanize" all the HTML files and generate a "binary" launcher script. When HTML is vulcanized, it means all the script tags and HTML imports are inlined into one big HTML file. Then the Bazel build puts that index.html file inside a static assets zip. The python HTTP server then reads static assets from that zip while serving.
@@ -168,11 +169,11 @@ bazel build third_party/chromium
 
 ### Debugging Angular UI Tests Locally
 
-Here is a short summary of the various commands and their primary function. Please see below for more details. We recommand using `ibazle test` for regular work and `bazel run` for deep dive debugging.
+Here is a short summary of the various commands and their primary function. Please see below for more details. We recommand using `ibazel test` for regular work and `bazel run` for deep dive debugging.
 
 - `bazel test/run`: runs tests once and done.
 - `ibazel test`: supports file watching.
-- `ibazle run`: provides karma console breakpoint debugging; does not support file watching.
+- `ibazel run`: provides karma console breakpoint debugging; does not support file watching.
 - Both `ibazel test` and `ibazel run` supports `console.log` and `fit/fdescribe`, which are used to narrow down the test amount.
 
 1.  Just run all webapp tests. The job stops after finished. `console.log` is not
@@ -246,7 +247,7 @@ to be edited by hand.
 
 4.  Rebuild and test TensorBoard to make sure it works:
     * `rm -rf node_modules; bazel clean --expunge; yarn`
-    * `bazel run tensorboard --logdir <your favorite logdir>`
+    * `bazel run tensorboard -- --logdir <your favorite logdir>`
     * `bazel test --test_output=errors tensorboard/webapp/... tensorboard/components/... tensorboard/plugins/...`
 
 ## Updating rules_nodejs

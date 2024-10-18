@@ -21,30 +21,36 @@ import {
 } from '@angular/core';
 import {TimeSelection} from '../../../widgets/card_fob/card_fob_types';
 import {findClosestIndex} from '../../../widgets/line_chart_v2/sub_view/line_chart_interactive_utils';
+import {HeaderEditInfo, HeaderToggleInfo} from '../../types';
+import {RunToHparamMap} from '../../../runs/types';
 import {
-  ColumnHeader,
-  ColumnHeaderType,
   ScalarCardDataSeries,
   ScalarCardPoint,
   ScalarCardSeriesMetadataMap,
-  SelectedStepRunData,
+  SmoothedSeriesMetadata,
+} from './scalar_card_types';
+import {
+  ColumnHeader,
+  ColumnHeaderType,
+  DataTableMode,
+  TableData,
   SortingInfo,
   SortingOrder,
-} from './scalar_card_types';
+  DiscreteFilter,
+  IntervalFilter,
+  FilterAddedEvent,
+  ReorderColumnEvent,
+  AddColumnEvent,
+  AddColumnSize,
+} from '../../../widgets/data_table/types';
+import {isDatumVisible} from './utils';
+import {memoize} from '../../../util/memoize';
 
 @Component({
+  standalone: false,
   selector: 'scalar-card-data-table',
-  template: `
-    <tb-data-table
-      [headers]="columnHeaders"
-      [data]="getTimeSelectionTableData()"
-      [sortingInfo]="sortingInfo"
-      [columnCustomizationEnabled]="columnCustomizationEnabled"
-      [smoothingEnabled]="smoothingEnabled"
-      (sortDataBy)="sortDataBy.emit($event)"
-      (orderColumns)="orderColumns.emit($event)"
-    ></tb-data-table>
-  `,
+  templateUrl: 'scalar_card_data_table.ng.html',
+  styleUrls: ['scalar_card_data_table.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ScalarCardDataTable {
@@ -54,55 +60,96 @@ export class ScalarCardDataTable {
   @Input() columnHeaders!: ColumnHeader[];
   @Input() sortingInfo!: SortingInfo;
   @Input() columnCustomizationEnabled!: boolean;
+  @Input() columnContextMenusEnabled!: boolean;
   @Input() smoothingEnabled!: boolean;
+  @Input() columnFilters!: Map<string, DiscreteFilter | IntervalFilter>;
+  @Input() selectableColumns!: ColumnHeader[];
+  @Input() numColumnsLoaded!: number;
+  @Input() numColumnsToLoad!: number;
+  @Input() runToHparamMap!: RunToHparamMap;
 
   @Output() sortDataBy = new EventEmitter<SortingInfo>();
-  @Output() orderColumns = new EventEmitter<ColumnHeader[]>();
+  @Output() editColumnHeaders = new EventEmitter<HeaderEditInfo>();
+  @Output() addColumn = new EventEmitter<AddColumnEvent>();
+  @Output() removeColumn = new EventEmitter<HeaderToggleInfo>();
+  @Output() addFilter = new EventEmitter<FilterAddedEvent>();
+  @Output() loadAllColumns = new EventEmitter<null>();
 
-  getMinValueInRange(
+  readonly ColumnHeaderType = ColumnHeaderType;
+  readonly AddColumnSize = AddColumnSize;
+
+  // Columns must be memoized to stop needless re-rendering of the content and headers in these
+  // columns. This has been known to cause problems with the controls in these columns,
+  // specifically the add button.
+  extendHeaders = memoize(this.internalExtendHeaders);
+
+  private internalExtendHeaders(headers: ColumnHeader[]) {
+    return ([] as Array<ColumnHeader>).concat(
+      [
+        {
+          name: 'color',
+          displayName: '',
+          type: ColumnHeaderType.COLOR,
+          enabled: true,
+        },
+      ],
+      headers
+    );
+  }
+
+  getMinPointInRange(
     points: ScalarCardPoint[],
     startPointIndex: number,
-    endPointIndex: number,
-    smoothed: boolean = false
-  ): number {
-    let minValue = this.maybeSmoothedValue(points[startPointIndex], smoothed);
+    endPointIndex: number
+  ): ScalarCardPoint {
+    let minValue = points[startPointIndex].y;
+    let minValuePoint = points[startPointIndex];
     for (let i = startPointIndex; i <= endPointIndex; i++) {
-      if (minValue > this.maybeSmoothedValue(points[i], smoothed)) {
-        minValue = this.maybeSmoothedValue(points[i], smoothed);
+      if (minValue > points[i].y) {
+        minValue = points[i].y;
+        minValuePoint = points[i];
       }
     }
-    return minValue;
+    return minValuePoint;
   }
 
-  getMaxValueInRange(
+  getMaxPointInRange(
     points: ScalarCardPoint[],
     startPointIndex: number,
-    endPointIndex: number,
-    smoothed: boolean = false
-  ): number {
-    let maxValue = this.maybeSmoothedValue(points[startPointIndex], smoothed);
+    endPointIndex: number
+  ): ScalarCardPoint {
+    let maxValue = points[startPointIndex].y;
+    let maxValuePoint = points[startPointIndex];
     for (let i = startPointIndex; i <= endPointIndex; i++) {
-      if (maxValue < this.maybeSmoothedValue(points[i], smoothed)) {
-        maxValue = this.maybeSmoothedValue(points[i], smoothed);
+      if (maxValue < points[i].y) {
+        maxValue = points[i].y;
+        maxValuePoint = points[i];
       }
     }
-    return maxValue;
+    return maxValuePoint;
   }
 
-  maybeSmoothedValue(point: ScalarCardPoint, smoothed: boolean) {
-    return smoothed ? point.y : point.value;
+  getMean(
+    points: ScalarCardPoint[],
+    startPointIndex: number,
+    endPointIndex: number
+  ) {
+    let sum = 0;
+    for (let i = startPointIndex; i <= endPointIndex; i++) {
+      sum += points[i].value;
+    }
+    return sum / (endPointIndex - startPointIndex + 1);
   }
 
-  getTimeSelectionTableData(): SelectedStepRunData[] {
-    if (this.stepOrLinkedTimeSelection === null) {
+  getTimeSelectionTableData(): TableData[] {
+    if (!this.stepOrLinkedTimeSelection) {
       return [];
     }
     const startStep = this.stepOrLinkedTimeSelection.start.step;
     const endStep = this.stepOrLinkedTimeSelection.end?.step;
-    const dataTableData: SelectedStepRunData[] = this.dataSeries
+    const dataTableData: TableData[] = this.dataSeries
       .filter((datum) => {
-        const metadata = this.chartMetadataMap[datum.id];
-        return metadata && metadata.visible && !Boolean(metadata.aux);
+        return isDatumVisible(datum, this.chartMetadataMap);
       })
       .map((datum) => {
         const metadata = this.chartMetadataMap[datum.id];
@@ -117,10 +164,10 @@ export class ScalarCardDataTable {
           closestEndPointIndex = findClosestIndex(datum.points, endStep);
           closestEndPoint = datum.points[closestEndPointIndex];
         }
-        const selectedStepData: SelectedStepRunData = {
+        const selectedStepData: TableData = {
           id: datum.id,
+          color: metadata.color,
         };
-        selectedStepData.COLOR = metadata.color;
         for (const header of this.columnHeaders) {
           switch (header.type) {
             case ColumnHeaderType.RUN:
@@ -128,74 +175,116 @@ export class ScalarCardDataTable {
               if (metadata.alias) {
                 alias = `${metadata.alias.aliasNumber} ${metadata.alias.aliasText}/`;
               }
-              selectedStepData.RUN = `${alias}${metadata.displayName}`;
+              selectedStepData[header.name] = `${alias}${metadata.displayName}`;
               continue;
             case ColumnHeaderType.STEP:
-              selectedStepData.STEP = closestStartPoint.step;
+              selectedStepData[header.name] = closestStartPoint.step;
               continue;
             case ColumnHeaderType.VALUE:
-              selectedStepData.VALUE = closestStartPoint.value;
+              selectedStepData[header.name] = closestStartPoint.value;
               continue;
             case ColumnHeaderType.RELATIVE_TIME:
-              selectedStepData.RELATIVE_TIME =
+              selectedStepData[header.name] =
                 closestStartPoint.relativeTimeInMs;
               continue;
             case ColumnHeaderType.SMOOTHED:
-              selectedStepData.SMOOTHED = closestStartPoint.y;
+              selectedStepData[header.name] = closestStartPoint.y;
               continue;
             case ColumnHeaderType.VALUE_CHANGE:
               if (!closestEndPoint) {
                 continue;
               }
-              selectedStepData.VALUE_CHANGE =
+              selectedStepData[header.name] =
                 closestEndPoint.y - closestStartPoint.y;
               continue;
             case ColumnHeaderType.START_STEP:
-              selectedStepData.START_STEP = closestStartPoint.step;
+              selectedStepData[header.name] = closestStartPoint.step;
               continue;
             case ColumnHeaderType.END_STEP:
               if (!closestEndPoint) {
                 continue;
               }
-              selectedStepData.END_STEP = closestEndPoint.step;
+              selectedStepData[header.name] = closestEndPoint.step;
               continue;
             case ColumnHeaderType.START_VALUE:
-              selectedStepData.START_VALUE = closestStartPoint.y;
+              selectedStepData[header.name] = closestStartPoint.y;
               continue;
             case ColumnHeaderType.END_VALUE:
               if (!closestEndPoint) {
                 continue;
               }
-              selectedStepData.END_VALUE = closestEndPoint.y;
+              selectedStepData[header.name] = closestEndPoint.y;
               continue;
             case ColumnHeaderType.MIN_VALUE:
               if (!closestEndPointIndex) {
                 continue;
               }
-              selectedStepData.MIN_VALUE = this.getMinValueInRange(
+              selectedStepData[header.name] = this.getMinPointInRange(
                 datum.points,
                 closestStartPointIndex,
-                closestEndPointIndex,
-                true
-              );
+                closestEndPointIndex
+              ).y;
               continue;
             case ColumnHeaderType.MAX_VALUE:
               if (!closestEndPointIndex) {
                 continue;
               }
-              selectedStepData.MAX_VALUE = this.getMaxValueInRange(
+              selectedStepData[header.name] = this.getMaxPointInRange(
                 datum.points,
                 closestStartPointIndex,
-                closestEndPointIndex,
-                true
-              );
+                closestEndPointIndex
+              ).y;
               continue;
             case ColumnHeaderType.PERCENTAGE_CHANGE:
               if (!closestEndPoint) {
                 continue;
               }
-              selectedStepData.PERCENTAGE_CHANGE =
+              selectedStepData[header.name] =
                 (closestEndPoint.y - closestStartPoint.y) / closestStartPoint.y;
+              continue;
+            case ColumnHeaderType.STEP_AT_MAX:
+              if (!closestEndPointIndex) {
+                continue;
+              }
+              selectedStepData[header.name] = this.getMaxPointInRange(
+                datum.points,
+                closestStartPointIndex,
+                closestEndPointIndex
+              ).step;
+              continue;
+            case ColumnHeaderType.STEP_AT_MIN:
+              if (!closestEndPointIndex) {
+                continue;
+              }
+              selectedStepData[header.name] = this.getMinPointInRange(
+                datum.points,
+                closestStartPointIndex,
+                closestEndPointIndex
+              ).step;
+              continue;
+            case ColumnHeaderType.MEAN:
+              if (!closestEndPointIndex) {
+                continue;
+              }
+              selectedStepData[header.name] = this.getMean(
+                datum.points,
+                closestStartPointIndex,
+                closestEndPointIndex
+              );
+              continue;
+            case ColumnHeaderType.RAW_CHANGE:
+              if (!closestEndPoint) {
+                continue;
+              }
+              selectedStepData[header.name] =
+                closestEndPoint.value - closestStartPoint.value;
+              continue;
+            case ColumnHeaderType.HPARAM:
+              const runId =
+                (metadata as SmoothedSeriesMetadata).originalSeriesId ||
+                metadata.id;
+              selectedStepData[header.name] =
+                this.runToHparamMap?.[runId]?.get(header.name) ?? '';
               continue;
             default:
               continue;
@@ -203,10 +292,16 @@ export class ScalarCardDataTable {
         }
         return selectedStepData;
       });
-    dataTableData.sort(
-      (point1: SelectedStepRunData, point2: SelectedStepRunData) => {
-        const p1 = this.getSortableValue(point1, this.sortingInfo.header);
-        const p2 = this.getSortableValue(point2, this.sortingInfo.header);
+    const sortingHeader = this.columnHeaders.find(
+      (header) => header.name === this.sortingInfo.name
+    );
+    if (sortingHeader !== undefined) {
+      dataTableData.sort((point1: TableData, point2: TableData) => {
+        if (!sortingHeader) {
+          return 0;
+        }
+        const p1 = this.getSortableValue(point1, sortingHeader);
+        const p2 = this.getSortableValue(point2, sortingHeader);
         if (p1 < p2) {
           return this.sortingInfo.order === SortingOrder.ASCENDING ? -1 : 1;
         }
@@ -215,27 +310,51 @@ export class ScalarCardDataTable {
         }
 
         return 0;
-      }
-    );
+      });
+    }
     return dataTableData;
   }
 
-  private getSortableValue(
-    point: SelectedStepRunData,
-    header: ColumnHeaderType
-  ) {
-    switch (header) {
-      // The value shown in the "RUN" column is a string concatenation of Alias Id + Alias + Run Name
-      // but we would actually prefer to sort by just the run name.
-      case ColumnHeaderType.RUN:
-        return makeValueSortable(this.chartMetadataMap[point.id].displayName);
-      default:
-        return makeValueSortable(point[header]);
+  private getSortableValue(point: TableData, header: ColumnHeader) {
+    // The value shown in the "RUN" column is a string concatenation of Alias Id + Alias + Run Name
+    // but we would actually prefer to sort by just the run name.
+    if (header.type === ColumnHeaderType.RUN) {
+      return makeValueSortable(this.chartMetadataMap[point.id].displayName);
     }
+
+    return makeValueSortable(point[header.name]);
+  }
+
+  private getDataTableMode(): DataTableMode {
+    return this.stepOrLinkedTimeSelection.end
+      ? DataTableMode.RANGE
+      : DataTableMode.SINGLE;
+  }
+
+  onOrderColumns({source, destination, side}: ReorderColumnEvent) {
+    this.editColumnHeaders.emit({
+      source,
+      destination,
+      side,
+      dataTableMode: this.getDataTableMode(),
+    });
+  }
+
+  onRemoveColumn(header: ColumnHeader) {
+    this.removeColumn.emit({header, dataTableMode: this.getDataTableMode()});
   }
 }
 
-function makeValueSortable(value: number | string | null | undefined) {
+function makeValueSortable(
+  value: number | string | boolean | null | undefined | object
+) {
+  if (typeof value === 'object') {
+    // The Scalar table does not currently support any objects.
+    // When support is added specific sorting logic to that object type should
+    // be added here.
+    return -Infinity;
+  }
+
   if (
     Number.isNaN(value) ||
     value === 'NaN' ||

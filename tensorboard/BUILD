@@ -4,6 +4,9 @@
 load("//tensorboard/defs:py_repl.bzl", "py_repl")
 load("//tensorboard/defs:web.bzl", "tf_web_library")
 load("//tensorboard/defs:zipper.bzl", "tensorboard_zip_file")
+load("@rules_python//python:py_binary.bzl", "py_binary")
+load("@rules_python//python:py_library.bzl", "py_library")
+load("@rules_python//python:py_test.bzl", "py_test")
 
 package(default_visibility = [":internal"])
 
@@ -31,7 +34,6 @@ py_binary(
         ":program",
         "//tensorboard:expect_tensorflow_installed",
         "//tensorboard/plugins:base_plugin",
-        "//tensorboard/uploader:uploader_subcommand",
         "//tensorboard/util:tb_logging",
         "//tensorboard/util:timing",  # non-strict dep, for patching convenience
     ],
@@ -59,7 +61,6 @@ py_binary(
         ":lib",
         ":main_lib",
         ":program",
-        "//tensorboard/uploader:uploader_subcommand",
     ],
 )
 
@@ -86,7 +87,6 @@ py_library(
         ":lib_init_only",
         ":notebook",
         ":program",
-        "//tensorboard/data:lib_init_only",
         "//tensorboard/summary",
         "//tensorboard/summary:summary_v1",
         "//tensorboard/summary:summary_v2",
@@ -103,7 +103,7 @@ py_library(
     name = "lib_init_only",
     srcs = ["__init__.py"],
     srcs_version = "PY3",
-    visibility = ["//tensorboard:internal"],
+    visibility = ["//visibility:public"],
     deps = [
         ":lazy",
         ":version",
@@ -316,12 +316,11 @@ py_library(
         "//tensorboard/plugins/image:images_plugin",
         "//tensorboard/plugins/mesh:mesh_plugin",
         "//tensorboard/plugins/metrics:metrics_plugin",
-        "//tensorboard/plugins/npmi:npmi_plugin",
         "//tensorboard/plugins/pr_curve:pr_curves_plugin",
         "//tensorboard/plugins/profile_redirect:profile_redirect_plugin",
         "//tensorboard/plugins/scalar:scalars_plugin",
         "//tensorboard/plugins/text:text_plugin",
-        "//tensorboard/plugins/text_v2:text_v2_plugin",
+        "//tensorboard/plugins/wit_redirect:wit_redirect_plugin",
     ],
 )
 
@@ -444,11 +443,6 @@ py_library(name = "expect_absl_flags_installed")
 # This is a dummy rule used as a absl-py dependency in open-source.
 # We expect absl-py to already be installed on the system, e.g. via
 # `pip install absl-py`
-py_library(name = "expect_absl_flags_argparse_flags_installed")
-
-# This is a dummy rule used as a absl-py dependency in open-source.
-# We expect absl-py to already be installed on the system, e.g. via
-# `pip install absl-py`
 py_library(name = "expect_absl_logging_installed")
 
 # This is a dummy rule used as a absl-py dependency in open-source.
@@ -456,25 +450,10 @@ py_library(name = "expect_absl_logging_installed")
 # `pip install absl-py`
 py_library(name = "expect_absl_testing_absltest_installed")
 
-# This is a dummy rule used as a google_auth dependency in open-source.
-# We expect google_auth to already be installed on the system, e.g., via
-# `pip install google-auth`.
-py_library(name = "expect_google_auth_installed")
-
-# This is a dummy rule used as a google_auth oauthlib_dependency in open-source.
-# We expect google_auth_oauthlib to already be installed on the system, e.g., via
-# `pip install google-auth-oauthlib`.
-py_library(name = "expect_google_auth_oauthlib_installed")
-
 # This is a dummy rule used as a pkg-resources dependency in open-source.
 # We expect pkg-resources to already be installed on the system, e.g., via
 # `pip install setuptools`.
 py_library(name = "expect_pkg_resources_installed")
-
-# This is a dummy rule used as a requests dependency in open-source.
-# We expect requests to already be installed on the system, e.g., via
-# `pip install requests`.
-py_library(name = "expect_requests_installed")
 
 # This is a dummy rule used as a pandas dependency in open-source.
 # We expect pandas to already be installed on the system, e.g. via
@@ -506,7 +485,7 @@ py_library(
     srcs = ["data_compat.py"],
     srcs_version = "PY3",
     deps = [
-        ":expect_protobuf_installed",
+        "//tensorboard:expect_protobuf_installed",
         "//tensorboard/compat/proto:protos_all_py_pb2",
         "//tensorboard/plugins/audio:metadata",
         "//tensorboard/plugins/histogram:metadata",
@@ -605,6 +584,7 @@ py_library(
     visibility = ["//visibility:public"],
     deps = [
         ":context",
+        "//tensorboard:expect_protobuf_installed",
         "//tensorboard/backend:experiment_id",
         "//tensorboard/util:tb_logging",
         "@org_mozilla_bleach",

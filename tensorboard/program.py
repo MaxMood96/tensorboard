@@ -113,6 +113,8 @@ class TensorBoard:
           server_class: An optional factory for a `TensorBoardServer` to use
             for serving the TensorBoard WSGI app. If provided, its callable
             signature should match that of `TensorBoardServer.__init__`.
+          subcommands: An optional list of TensorBoardSubcommand objects, which
+            extend the functionality of the CLI.
 
         :type plugins:
           list[
@@ -205,7 +207,7 @@ class TensorBoard:
             # any positional arguments to `serve`.
             serve_parser = serve_subparser
 
-        for (name, subcommand) in self.subcommands.items():
+        for name, subcommand in self.subcommands.items():
             subparser = subparsers.add_parser(
                 name,
                 help=subcommand.help(),
@@ -502,7 +504,16 @@ def _should_use_data_server(flags):
 
 
 class TensorBoardSubcommand(metaclass=ABCMeta):
-    """Experimental private API for defining subcommands to tensorboard(1)."""
+    """Experimental private API for defining subcommands for tensorboard.
+
+    The intended use is something like:
+
+    `tensorboard <sub_cmd_name> <additional_args...>`
+
+    Since our hosted service at http://tensorboard.dev has been shut down, this
+    functionality is no longer used, but the support for subcommands remains,
+    in case it is ever useful again.
+    """
 
     @abstractmethod
     def name(self):
@@ -698,7 +709,17 @@ class WerkzeugServer(serving.ThreadedWSGIServer, TensorBoardServer):
         self._url = None  # Will be set by get_url() below
 
         self._fix_werkzeug_logging()
+
+        def is_port_in_use(port):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                return s.connect_ex(("localhost", port)) == 0
+
         try:
+            if is_port_in_use(port):
+                raise TensorBoardPortInUseError(
+                    "TensorBoard could not bind to port %d, it was already in use"
+                    % port
+                )
             super().__init__(host, port, wsgi_app, _WSGIRequestHandler)
         except socket.error as e:
             if hasattr(errno, "EACCES") and e.errno == errno.EACCES:

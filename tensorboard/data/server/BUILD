@@ -1,3 +1,5 @@
+load("@rules_python//python:py_binary.bzl", "py_binary")
+load("@rules_python//python:py_test.bzl", "py_test")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//tensorboard:internal"])
@@ -29,7 +31,6 @@ _checked_in_file_descriptor_set = "descriptor.bin"
 rust_library(
     name = "rustboard_core",
     srcs = [
-        "lib.rs",
         "blob_key.rs",
         "cli.rs",
         "cli/dynamic_logdir.rs",
@@ -42,6 +43,7 @@ rust_library(
         "gcs/auth.rs",
         "gcs/client.rs",
         "gcs/logdir.rs",
+        "lib.rs",
         "logdir.rs",
         "masked_crc.rs",
         "reservoir.rs",
