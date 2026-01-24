@@ -35,4 +35,4 @@ pillow
 protobuf >= 3.19.6, != 4.24.0
 setuptools >= 41.0.0  # Note: provides pkg_resources as well as setuptools
 tensorboard-data-server >= 0.7.0, < 0.8.0
-werkzeug >= 1.0.1
+werkzeug>=3.1.5
