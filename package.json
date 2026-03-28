@@ -56,7 +56,7 @@
     "karma-jasmine": "^4.0.1",
     "karma-requirejs": "^1.1.0",
     "karma-sourcemap-loader": "^0.3.8",
-    "patch-package": "6.4.7",
+    "patch-package": "8.0.1",
     "prettier": "2.4.1",
     "prettier-plugin-organize-imports": "2.3.4",
     "requirejs": "^2.3.7",
