@@ -31,3 +31,4 @@ yamllint==1.17.0
 
 # For building Pip package
 virtualenv
+protobuf>=5.29.6 # not directly required, pinned by Snyk to avoid a vulnerability
