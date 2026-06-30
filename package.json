@@ -29,9 +29,9 @@
   "homepage": "https://github.com/tensorflow/tensorboard#readme",
   "devDependencies": {
     "@angular-devkit/build-angular": "^18.0.0",
-    "@angular/build": "^18.0.0",
+    "@angular/build": "^19.2.22",
     "@angular/build-tooling": "https://github.com/angular/dev-infra-private-build-tooling-builds.git#c2de5cda47188d1ed960cd3c6fa9f4b699ba1001",
-    "@angular/cli": "^18.0.0",
+    "@angular/cli": "^20.3.15",
     "@angular/compiler": "18.2.14",
     "@angular/compiler-cli": "^18.0.0",
     "@babel/core": "^7.16.12",
