@@ -219,6 +219,9 @@ def tf_ng_web_test_suite(name, deps = [], external = [], **kwargs):
         run_angular_linker = False,
         platform = "browser",
         external = external,
+        # io_bazel_rules_webtesting updated to browsers-0.3.4 which ships chrome 123
+        # chrome 123 headless crashes on es2022 class static blocks so we use es2021
+        target = "es2021",
     )
 
     karma_web_test_suite(

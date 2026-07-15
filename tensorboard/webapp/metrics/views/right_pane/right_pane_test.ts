@@ -441,20 +441,16 @@ describe('metrics right_pane', () => {
         );
       });
 
-      it('sets the card width to the value provided', fakeAsync(() => {
+      it('sets the card width to the value provided', () => {
         store.overrideSelector(selectors.getMetricsCardMinWidth, 400);
         const fixture = TestBed.createComponent(SettingsViewContainer);
         fixture.detectChanges();
 
-        // For some unknown reason sliders which do not display a thumb do not
-        // update aria-valuetext properly in tests. As a workaround I am using
-        // the ng-reflect-value attribute for this test.
-        expect(
-          select(fixture, CARD_WIDTH_SLIDER)
-            .query(By.css('input'))
-            .nativeElement.getAttribute('ng-reflect-value')
-        ).toBe('400');
-      }));
+        const settingsView = fixture.debugElement.query(
+          By.directive(SettingsViewComponent)
+        ).componentInstance as SettingsViewComponent;
+        expect(settingsView.cardMinWidth).toBe(400);
+      });
 
       it('does not set invalid value', () => {
         store.overrideSelector(selectors.getMetricsCardMinWidth, null);

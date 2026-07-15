@@ -202,6 +202,15 @@ http_archive(
     ],
 )
 
+# Required by @angular/build-tooling's spec-bundling rules (spec-entrypoint.bzl).
+# Only the JsInfo/js_info providers are used; no toolchain setup is needed.
+http_archive(
+    name = "aspect_rules_js",
+    sha256 = "75c25a0f15a9e4592bbda45b57aa089e4bf17f9176fd735351e8c6444df87b52",
+    strip_prefix = "rules_js-2.1.0",
+    url = "https://github.com/aspect-build/rules_js/releases/download/v2.1.0/rules_js-v2.1.0.tar.gz",
+)
+
 load("@build_bazel_rules_nodejs//:repositories.bzl", "build_bazel_rules_nodejs_dependencies")
 
 build_bazel_rules_nodejs_dependencies()
@@ -236,7 +245,7 @@ yarn_install(
     # this Bazel/CI setup. Apply the generated patch artifacts directly during
     # yarn_install instead.
     post_install_patches = [
-        "//patches:@angular+build-tooling+0.0.0-bf0dd632ed129ee8770b09a6e11c6497162b3edb.patch",
+        "//patches:@angular+build-tooling+0.0.0-98b30ab5fdeeb1df3278f5257b9a8f07abb76941.patch",
         "//patches:@bazel+concatjs+5.8.1.patch",
     ],
     yarn_lock = "//:yarn.lock",
